@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
-import { createApp } from '../../app';
+import { createApp, mapearEndpoints } from '../../app';
 import { DjenController, type DjenServicePort } from './djen.controller';
 import { htmlParaTexto } from './html-text';
 import { respostaPodeSerCacheadaIndefinidamente } from './djen-cache';
 import { parseOfficialDjenResponse } from './official-response';
+
+test('mapeia os endpoints ativos e omite WhatsApp quando desabilitado', () => {
+  const mapaCompleto = mapearEndpoints('http://localhost:3000');
+  assert.match(mapaCompleto, /Swagger UI: GET http:\/\/localhost:3000\/api-docs/);
+  assert.match(mapaCompleto, /OpenAPI JSON: GET http:\/\/localhost:3000\/openapi\.json/);
+  assert.match(mapaCompleto, /Atualização de status: PATCH .*\/api\/v1\/publicacoes\/:id\/status/);
+  assert.equal((mapaCompleto.match(/webhook WhatsApp/g) ?? []).length, 2);
+  assert.doesNotMatch(mapearEndpoints('http://localhost:3000', false), /WhatsApp/);
+});
 
 test('preserva o corpo original e calcula hash verificável', () => {
   const body = Buffer.from('{\n  "items": []\n}', 'utf8');
