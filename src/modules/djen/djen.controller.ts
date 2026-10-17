@@ -5,6 +5,7 @@ export interface DjenServicePort {
   atualizarStatus(id: string, status: string): Promise<unknown>;
 }
 
+/** Adapta requisições HTTP às operações expostas pelo módulo DJEN. */
 export class DjenController {
   constructor(private readonly djenService: DjenServicePort) {}
 
