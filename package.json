@@ -4,6 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev:api": "tsx src/server.ts",
+    "dev:web": "npm --prefix frontend run dev",
+    "build:web": "npm --prefix frontend run build",
     "test": "tsx --test src/modules/djen/djen.controller.test.ts src/modules/djen/djen-read.controller.test.ts src/modules/djen/application/publicacao.dto.test.ts src/modules/djen/application/sync/djen-sync.worker.test.ts src/modules/operacional/whatsapp.test.ts",
     "djen:sync": "tsx src/modules/djen/worker.ts",
     "djen:sync:once": "tsx src/modules/djen/worker.ts --once"
