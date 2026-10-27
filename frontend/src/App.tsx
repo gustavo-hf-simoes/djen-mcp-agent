@@ -3,23 +3,33 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Warning, Timer } from '@phosphor-icons/react'
 
 import { Layout } from './components/Layout'
+import type { ActiveTab } from './components/Header'
+import { LoginScreen } from './components/LoginScreen'
+import { ControladoriaPanel } from './components/ControladoriaPanel'
+import { ProcessosPanel } from './components/ProcessosPanel'
+import { SaasAdminPanel } from './components/SaasAdminPanel'
 import { FilterPanel, type FilterValues } from './components/FilterPanel'
 import { ResultCard } from './components/ResultCard'
 import { LoadingState } from './components/LoadingState'
 import { EmptyState } from './components/EmptyState'
 import { Pagination } from './components/Pagination'
 
-import { buscarComunicacoes, DjenError } from './api/djen'
+import {
+  buscarComunicacoes,
+  buscarSessaoAtual,
+  sincronizarDjenAgora,
+  getStoredToken,
+  setStoredToken,
+  DjenError,
+  type UsuarioSessao,
+} from './api/djen'
 import type { BuscaParams, Comunicacao } from './types/comunicacao'
 
-const OAB_NUMERO   = '69161'
-const OAB_UF       = 'PR'
 const ITEMS_PER_PAGE = 100
 
 // ─── Banner de erro ───────────────────────────────────────────────────────────
 
 function ErrorBanner({ message, isRateLimit, status }: { message: string; isRateLimit: boolean; status?: number }) {
-  // 503 / manutenção → aviso âmbar; outros erros → vermelho
   const isWarning = isRateLimit || status === 503 || status === 502 || status === 504
 
   return (
@@ -57,11 +67,13 @@ function ErrorBanner({ message, isRateLimit, status }: { message: string; isRate
 
 // ─── Cabeçalho dos resultados ─────────────────────────────────────────────────
 
-function ResultsHeader({ total, filtered, hasClientFilter, siglaTribunal }: {
+function ResultsHeader({ total, filtered, hasClientFilter, siglaTribunal, oabNumero, oabUf }: {
   total: number
   filtered: number
   hasClientFilter: boolean
   siglaTribunal?: string
+  oabNumero: string
+  oabUf: string
 }) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -81,7 +93,7 @@ function ResultsHeader({ total, filtered, hasClientFilter, siglaTribunal }: {
           )}
         </h2>
         <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-faint)' }}>
-          OAB {OAB_NUMERO}/{OAB_UF}{siglaTribunal ? ` · ${siglaTribunal}` : ''}
+          OAB {oabNumero}/{oabUf}{siglaTribunal ? ` · ${siglaTribunal}` : ''}
         </p>
       </div>
       {total >= 10000 && (
@@ -103,6 +115,13 @@ function ResultsHeader({ total, filtered, hasClientFilter, siglaTribunal }: {
 type AppStatus = 'loading' | 'success' | 'error'
 
 export function App() {
+  const [usuario, setUsuario]           = useState<UsuarioSessao | null>(null)
+  const [checkingAuth, setCheckingAuth] = useState(true)
+  const [activeTab, setActiveTab]       = useState<ActiveTab>('controladoria')
+  const [syncing, setSyncing]           = useState(false)
+  const [syncMessage, setSyncMessage]   = useState<string | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
   const [status, setStatus]             = useState<AppStatus>('loading')
   const [errorMsg, setErrorMsg]         = useState('')
   const [isRateLimit, setIsRateLimit]   = useState(false)
@@ -116,7 +135,20 @@ export function App() {
     textoBusca: '',
   })
 
-  const executeSearch = useCallback(async (apiParams: BuscaParams, page: number) => {
+  // Restaura sessão ao abrir
+  useEffect(() => {
+    const token = getStoredToken()
+    if (!token) {
+      setCheckingAuth(false)
+      return
+    }
+    buscarSessaoAtual()
+      .then(res => setUsuario(res.usuario))
+      .catch(() => setStoredToken(null))
+      .finally(() => setCheckingAuth(false))
+  }, [])
+
+  const executeSearch = useCallback(async (apiParams: BuscaParams, page: number, oabNumero = '69161', oabUf = 'PR') => {
     setStatus('loading')
     setErrorMsg('')
     setIsRateLimit(false)
@@ -124,8 +156,8 @@ export function App() {
     try {
       const response = await buscarComunicacoes({
         ...apiParams,
-        numeroOab: OAB_NUMERO,
-        ufOab: OAB_UF,
+        numeroOab: oabNumero,
+        ufOab: oabUf,
         pagina: page,
         itensPorPagina: ITEMS_PER_PAGE,
       })
@@ -136,6 +168,11 @@ export function App() {
       setStatus('success')
     } catch (err) {
       if (err instanceof DjenError) {
+        if (err.status === 401) {
+          setStoredToken(null)
+          setUsuario(null)
+          return
+        }
         setErrorMsg(err.message)
         setIsRateLimit(err.isRateLimit)
         setErrorStatus(err.status)
@@ -147,16 +184,42 @@ export function App() {
     }
   }, [])
 
-  // Carrega automaticamente ao abrir
-  useEffect(() => { void executeSearch({}, 1) }, [executeSearch])
+  useEffect(() => {
+    if (usuario && activeTab === 'djen_live') {
+      void executeSearch({}, 1, usuario.oab.numero, usuario.oab.uf)
+    }
+  }, [usuario, activeTab, executeSearch])
 
-  // Tribunais presentes nos dados carregados — derivado, nunca fixo
+  async function handleSyncNow() {
+    setSyncing(true)
+    setSyncMessage(null)
+    try {
+      const res = await sincronizarDjenAgora(14)
+      setSyncMessage(
+        `Sincronização DJEN concluída (${res.dataInicio} a ${res.dataFim}): ${res.totalComunicacoesEncontradas} comunicações verificadas e persistidas.`
+      )
+      setRefreshTrigger(v => v + 1)
+    } catch (err) {
+      if (err instanceof DjenError) {
+        setSyncMessage(`Aviso na sincronização: ${err.message}`)
+      } else {
+        setSyncMessage('Não foi possível sincronizar agora.')
+      }
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  function handleLogout() {
+    setStoredToken(null)
+    setUsuario(null)
+  }
+
   const tribunaisDisponiveis = useMemo(() => {
     const siglas = Array.from(new Set(allItems.map(i => i.siglaTribunal).filter(Boolean)))
     return siglas.sort()
   }, [allItems])
 
-  // Filtros client-side
   const filteredItems = useMemo(() => {
     let items = allItems
     if (clientFilters.tipoComunicacao) {
@@ -181,76 +244,123 @@ export function App() {
       apiParams.siglaTribunal              !== lastApiParams.siglaTribunal ||
       apiParams.dataDisponibilizacaoInicio !== lastApiParams.dataDisponibilizacaoInicio ||
       apiParams.dataDisponibilizacaoFim    !== lastApiParams.dataDisponibilizacaoFim
-    if (apiChanged) void executeSearch(apiParams, 1)
+    if (apiChanged && usuario) void executeSearch(apiParams, 1, usuario.oab.numero, usuario.oab.uf)
   }
 
   function handlePageChange(page: number) {
-    void executeSearch(lastApiParams, page)
+    if (usuario) void executeSearch(lastApiParams, page, usuario.oab.numero, usuario.oab.uf)
     document.getElementById('resultados')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center" style={{ background: 'var(--color-surface)' }}>
+        <LoadingState />
+      </div>
+    )
+  }
+
+  if (!usuario) {
+    return <LoginScreen onSuccess={setUsuario} />
   }
 
   const hasClientFilter = Boolean(clientFilters.tipoComunicacao || clientFilters.textoBusca)
   const isLoading = status === 'loading'
 
   return (
-    <Layout>
-      <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 lg:items-start">
-
-        {/* Painel de filtros */}
-        <div className="w-full lg:w-60 lg:sticky lg:top-20 shrink-0">
-          <FilterPanel loading={isLoading} tribunais={tribunaisDisponiveis} onFilter={handleFilter} />
+    <Layout
+      usuario={usuario}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      onSyncNow={() => void handleSyncNow()}
+      syncing={syncing}
+      onLogout={handleLogout}
+    >
+      {syncMessage && (
+        <div
+          className="mb-6 p-3.5 rounded-xl text-xs font-medium flex items-center justify-between"
+          style={{
+            background: 'rgba(224,159,62,0.12)',
+            border: '1px solid rgba(224,159,62,0.3)',
+            color: 'var(--color-accent)',
+          }}
+        >
+          <span>{syncMessage}</span>
+          <button type="button" onClick={() => setSyncMessage(null)} className="text-xs underline ml-4">
+            Fechar
+          </button>
         </div>
+      )}
 
-        {/* Resultados */}
-        <div id="resultados" className="flex-1 min-w-0 space-y-4">
+      {activeTab === 'controladoria' && (
+        <ControladoriaPanel refreshTrigger={refreshTrigger} />
+      )}
 
-          <AnimatePresence>
-            {status === 'error' && (
-              <ErrorBanner message={errorMsg} isRateLimit={isRateLimit} status={errorStatus} />
-            )}
-          </AnimatePresence>
+      {activeTab === 'processos' && (
+        <ProcessosPanel refreshTrigger={refreshTrigger} />
+      )}
 
-          {isLoading && <LoadingState />}
+      {activeTab === 'saas_admin' && (
+        <SaasAdminPanel usuarioLogado={usuario} />
+      )}
 
-          {status === 'success' && (
-            <div className="space-y-4">
-              <ResultsHeader
-                total={total}
-                filtered={filteredItems.length}
-                hasClientFilter={hasClientFilter}
-                siglaTribunal={lastApiParams.siglaTribunal}
-              />
+      {activeTab === 'djen_live' && (
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 lg:items-start">
+          <div className="w-full lg:w-60 lg:sticky lg:top-28 shrink-0">
+            <FilterPanel loading={isLoading} tribunais={tribunaisDisponiveis} onFilter={handleFilter} />
+          </div>
 
-              {filteredItems.length === 0
-                ? <EmptyState variant="no-results" />
-                : (
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={`${currentPage}-${clientFilters.tipoComunicacao}-${clientFilters.textoBusca}`}
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="space-y-2"
-                    >
-                      {filteredItems.map((c, i) => (
-                        <ResultCard key={c.id} comunicacao={c} index={i} />
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
-                )
-              }
-
-              {!hasClientFilter && filteredItems.length > 0 && (
-                <Pagination
-                  currentPage={currentPage}
-                  totalItems={total}
-                  itemsPerPage={ITEMS_PER_PAGE}
-                  onPageChange={handlePageChange}
-                />
+          <div id="resultados" className="flex-1 min-w-0 space-y-4">
+            <AnimatePresence>
+              {status === 'error' && (
+                <ErrorBanner message={errorMsg} isRateLimit={isRateLimit} status={errorStatus} />
               )}
-            </div>
-          )}
+            </AnimatePresence>
+
+            {isLoading && <LoadingState />}
+
+            {status === 'success' && (
+              <div className="space-y-4">
+                <ResultsHeader
+                  total={total}
+                  filtered={filteredItems.length}
+                  hasClientFilter={hasClientFilter}
+                  siglaTribunal={lastApiParams.siglaTribunal}
+                  oabNumero={usuario.oab.numero}
+                  oabUf={usuario.oab.uf}
+                />
+
+                {filteredItems.length === 0
+                  ? <EmptyState variant="no-results" />
+                  : (
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={`${currentPage}-${clientFilters.tipoComunicacao}-${clientFilters.textoBusca}`}
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-2"
+                      >
+                        {filteredItems.map((c, i) => (
+                          <ResultCard key={c.id} comunicacao={c} index={i} />
+                        ))}
+                      </motion.div>
+                    </AnimatePresence>
+                  )
+                }
+
+                {!hasClientFilter && filteredItems.length > 0 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalItems={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={handlePageChange}
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </Layout>
   )
 }

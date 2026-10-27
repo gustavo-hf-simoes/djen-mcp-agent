@@ -3,15 +3,20 @@ import cors from 'cors';
 import type { DjenController } from './modules/djen/djen.controller';
 import type { DjenReadController } from './modules/djen/djen-read.controller';
 import type { WhatsAppWebhookController } from './modules/operacional/whatsapp.controller';
+import { AuthController, requireAuth, requireRole } from './modules/auth/auth.controller';
 import swaggerUi from 'swagger-ui-express';
 import { openApiDocument } from './openapi';
 
 export const API_ENDPOINTS = {
   swagger: '/api-docs',
   openapi: '/openapi.json',
+  authLogin: '/api/v1/auth/login',
+  authMe: '/api/v1/auth/me',
+  authUsuarios: '/api/v1/auth/usuarios',
   djenComunicacoes: '/api/v1/comunicacao',
   djenStatus: '/api/djen/intimacoes/:id/status',
   publicacaoStatus: '/api/v1/publicacoes/:id/status',
+  publicacoesSincronizar: '/api/v1/publicacoes/sincronizar',
   publicacoesDashboard: '/api/v1/publicacoes/dashboard',
   publicacoes: '/api/v1/publicacoes',
   processos: '/api/v1/processos',
@@ -24,7 +29,11 @@ export function mapearEndpoints(baseUrl: string, incluirWhatsApp = true): string
   const endpoints = [
     { nome: 'Swagger UI', metodo: 'GET', caminho: API_ENDPOINTS.swagger },
     { nome: 'OpenAPI JSON', metodo: 'GET', caminho: API_ENDPOINTS.openapi },
+    { nome: 'Login SaaS', metodo: 'POST', caminho: API_ENDPOINTS.authLogin },
+    { nome: 'Sessão Atual', metodo: 'GET', caminho: API_ENDPOINTS.authMe },
+    { nome: 'Gestão SaaS (Master/Admin)', metodo: 'GET', caminho: API_ENDPOINTS.authUsuarios },
     { nome: 'Consulta de Comunicações', metodo: 'GET', caminho: API_ENDPOINTS.djenComunicacoes },
+    { nome: 'Sincronizar DJEN Agora', metodo: 'POST', caminho: API_ENDPOINTS.publicacoesSincronizar },
     { nome: 'Dashboard de publicações', metodo: 'GET', caminho: API_ENDPOINTS.publicacoesDashboard },
     { nome: 'Lista de processos', metodo: 'GET', caminho: API_ENDPOINTS.processos },
     { nome: 'Publicações do processo', metodo: 'GET', caminho: API_ENDPOINTS.processoPublicacoes },
@@ -46,7 +55,8 @@ export function mapearEndpoints(baseUrl: string, incluirWhatsApp = true): string
 export function createApp(
   djenController: DjenController,
   whatsappController?: WhatsAppWebhookController,
-  djenReadController?: DjenReadController
+  djenReadController?: DjenReadController,
+  authController?: AuthController
 ) {
   const app = express();
   app.use(cors());
@@ -64,16 +74,30 @@ export function createApp(
 
   app.use(express.json());
 
-  app.get(API_ENDPOINTS.djenComunicacoes, (req, res) => djenController.listar(req, res));
-  app.patch(API_ENDPOINTS.djenStatus, (req, res) => djenController.atualizarStatus(req, res));
-  app.patch(API_ENDPOINTS.publicacaoStatus, (req, res) => djenController.atualizarStatus(req, res));
+  const protect = requireAuth(Boolean(authController));
+
+  if (authController) {
+    app.post(API_ENDPOINTS.authLogin, (req, res) => authController.login(req, res));
+    app.get(API_ENDPOINTS.authMe, protect, (req, res) => authController.me(req, res));
+    app.get(
+      API_ENDPOINTS.authUsuarios,
+      protect,
+      requireRole('MASTER', 'ADMIN_DEV'),
+      (req, res) => authController.listarUsuariosETenants(req, res)
+    );
+  }
+
+  app.get(API_ENDPOINTS.djenComunicacoes, protect, (req, res) => djenController.listar(req, res));
+  app.post(API_ENDPOINTS.publicacoesSincronizar, protect, (req, res) => djenController.sincronizar(req, res));
+  app.patch(API_ENDPOINTS.djenStatus, protect, (req, res) => djenController.atualizarStatus(req, res));
+  app.patch(API_ENDPOINTS.publicacaoStatus, protect, (req, res) => djenController.atualizarStatus(req, res));
 
   if (djenReadController) {
-    app.get(API_ENDPOINTS.publicacoesDashboard, (req, res) => djenReadController.dashboard(req, res));
-    app.get(API_ENDPOINTS.processos, (req, res) => djenReadController.listarProcessos(req, res));
-    app.get(API_ENDPOINTS.processoPublicacoes, (req, res) => djenReadController.listarPublicacoesDoProcesso(req, res));
-    app.get(API_ENDPOINTS.publicacoes, (req, res) => djenReadController.listarPublicacoes(req, res));
-    app.get(API_ENDPOINTS.tribunais, (req, res) => djenReadController.listarTribunais(req, res));
+    app.get(API_ENDPOINTS.publicacoesDashboard, protect, (req, res) => djenReadController.dashboard(req, res));
+    app.get(API_ENDPOINTS.processos, protect, (req, res) => djenReadController.listarProcessos(req, res));
+    app.get(API_ENDPOINTS.processoPublicacoes, protect, (req, res) => djenReadController.listarPublicacoesDoProcesso(req, res));
+    app.get(API_ENDPOINTS.publicacoes, protect, (req, res) => djenReadController.listarPublicacoes(req, res));
+    app.get(API_ENDPOINTS.tribunais, protect, (req, res) => djenReadController.listarTribunais(req, res));
   }
 
   return app;

@@ -4,6 +4,8 @@ import { DjenService } from './modules/djen/djen.service';
 import { DjenReadController } from './modules/djen/djen-read.controller';
 import { DjenReadService } from './modules/djen/application/djen-read.service';
 import { DjenReadRepository } from './modules/djen/infrastructure/djen-read.repository';
+import { AuthController } from './modules/auth/auth.controller';
+import { AuthService } from './modules/auth/auth.service';
 import { createApp, mapearEndpoints } from './app';
 import { pool } from './database';
 import { WhatsAppWebhookController } from './modules/operacional/whatsapp.controller';
@@ -12,6 +14,8 @@ import { secretKeyFromHex } from './modules/operacional/whatsapp.crypto';
 
 dotenv.config();
 
+const authService = new AuthService(pool);
+const authController = new AuthController(authService);
 const djenController = new DjenController(new DjenService());
 const djenReadController = new DjenReadController(new DjenReadService(new DjenReadRepository(pool)));
 const whatsappEncryptionKey = secretKeyFromHex(
@@ -32,12 +36,24 @@ const whatsappController = new WhatsAppWebhookController(
     ...(process.env.WHATSAPP_APP_SECRET ? { appSecret: process.env.WHATSAPP_APP_SECRET } : {})
   }
 );
-const app = createApp(djenController, whatsappController, djenReadController);
+const app = createApp(djenController, whatsappController, djenReadController, authController);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`\n==================================================`);
-  console.log(`🚀 Servidor Backend rodando na porta ${PORT}`);
-  console.log(mapearEndpoints(`http://localhost:${PORT}`, Boolean(whatsappController)));
-  console.log(`==================================================\n`);
-});
+
+async function bootstrap() {
+  try {
+    await authService.garantirSeedInicial();
+    console.log('🔐 Controle de acesso SaaS (RBAC Master/Admin/Advogado) verificado.');
+  } catch (err: any) {
+    console.warn('⚠️ Aviso ao verificar seed de usuários SaaS (verifique se a migration 005 foi aplicada):', err.message);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`\n==================================================`);
+    console.log(`🚀 Servidor Backend SaaS rodando na porta ${PORT}`);
+    console.log(mapearEndpoints(`http://localhost:${PORT}`, Boolean(whatsappController)));
+    console.log(`==================================================\n`);
+  });
+}
+
+void bootstrap();

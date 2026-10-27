@@ -4,10 +4,116 @@ import type {
   Tribunal,
 } from '../types/comunicacao'
 
-// A API do DJEN tem CORS aberto (Access-Control-Allow-Origin: *),
-// então chamamos diretamente sem precisar de proxy.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
 const OFICIAL_DJEN_URL = 'https://comunicaapi.pje.jus.br'
+const TOKEN_STORAGE_KEY = 'ghfs_adv_saas_token'
+
+export type UserRole = 'MASTER' | 'ADMIN_DEV' | 'ADVOGADO'
+
+export interface UsuarioSessao {
+  id: string
+  nome: string
+  email: string
+  role: UserRole
+  ativo: boolean
+  escritorio: {
+    id: string | null
+    nome: string | null
+    slug: string | null
+    plano: string | null
+  }
+  oab: {
+    numero: string
+    uf: string
+  }
+  ultimoLoginEm: string | null
+}
+
+export interface PublicacaoLocalDto {
+  id: string
+  processoId: string
+  numeroProcesso: string
+  tribunal: string | null
+  homepageTribunal: string | null
+  linkInteiroTeor: string | null
+  nomeOrgao: string | null
+  nomeClasse: string | null
+  tipoComunicacao: string
+  dataDisponibilizacao: string | null
+  dataPublicacao: string | null
+  texto: string
+  partes: Array<{ nome: string; polo: string | null }>
+  hash: string | null
+  statusLeitura: string
+  textoParaCopiar: string
+  estimativaPrazoFinal: {
+    status: 'CALCULADA_POR_PRAZO_EXPRESSO' | 'REGRA_LEGAL_PENDENTE' | 'SEM_DATA_PUBLICACAO'
+    dataFinal: string | null
+    diasUteis: number | null
+    mensagem: string
+  }
+}
+
+export interface DashboardLocalResponse {
+  contagens: {
+    totalPublicacoes: number
+    totalProcessos: number
+    porStatus: Record<string, number>
+  }
+  ultimasPublicacoes: PublicacaoLocalDto[]
+}
+
+export interface ProcessoResumoDto {
+  id: string
+  numeroProcesso: string
+  tribunal: string | null
+  homepageTribunal: string | null
+  orgaoJulgador: string | null
+  quantidadePublicacoes: number
+  ultimaPublicacao: {
+    id: string
+    data: string | null
+    tipoComunicacao: string | null
+    statusLeitura: string | null
+  } | null
+}
+
+export interface PaginatedResult<T> {
+  items: T[]
+  pagination: {
+    page: number
+    pageSize: number
+    totalItems: number
+    totalPages: number
+  }
+}
+
+export interface SaasAdminOverview {
+  usuarios: UsuarioSessao[]
+  escritorios: Array<{
+    id: string
+    nome: string
+    slug: string
+    plano: string
+    ativo: boolean
+    totalProcessos: number
+    totalUsuarios: number
+  }>
+}
+
+// ─── Token Storage ────────────────────────────────────────────────────────────
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_STORAGE_KEY)
+}
+
+export function setStoredToken(token: string | null): void {
+  if (token) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, token)
+  } else {
+    localStorage.removeItem(TOKEN_STORAGE_KEY)
+  }
+}
 
 // ─── Erros tipados ────────────────────────────────────────────────────────────
 
@@ -22,20 +128,40 @@ export class DjenError extends Error {
   }
 }
 
-// ─── Helper interno ───────────────────────────────────────────────────────────
+// ─── Helper interno autenticado ───────────────────────────────────────────────
 
-async function djenFetch<T>(path: string, params?: Record<string, string>): Promise<T> {
+async function apiFetch<T>(
+  path: string,
+  options?: {
+    method?: string
+    params?: Record<string, string>
+    body?: unknown
+  },
+): Promise<T> {
   const url = new URL(`${BASE_URL}${path}`)
 
-  if (params) {
-    Object.entries(params).forEach(([key, value]) => {
+  if (options?.params) {
+    Object.entries(options.params).forEach(([key, value]) => {
       if (value !== undefined && value !== '') {
         url.searchParams.set(key, value)
       }
     })
   }
 
-  const response = await fetch(url.toString())
+  const headers: Record<string, string> = {}
+  const token = getStoredToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  if (options?.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
+  }
+
+  const response = await fetch(url.toString(), {
+    method: options?.method ?? 'GET',
+    headers,
+    ...(options?.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+  })
 
   if (response.status === 429) {
     throw new DjenError(
@@ -46,11 +172,10 @@ async function djenFetch<T>(path: string, params?: Record<string, string>): Prom
   }
 
   if (!response.ok) {
-    // Tenta extrair a mensagem da resposta da API antes de lançar o erro
     let apiMessage: string | null = null
     try {
-      const body = await response.json() as { message?: string; status?: string }
-      if (body.message) apiMessage = body.message
+      const body = await response.json() as { message?: string; error?: string }
+      apiMessage = body.error ?? body.message ?? null
     } catch {
       // ignora erro de parse
     }
@@ -64,12 +189,106 @@ async function djenFetch<T>(path: string, params?: Record<string, string>): Prom
   return response.json() as Promise<T>
 }
 
-// ─── Endpoints públicos ───────────────────────────────────────────────────────
+// ─── Auth SaaS ────────────────────────────────────────────────────────────────
 
-/**
- * Busca comunicações processuais com os filtros fornecidos.
- * Pelo menos um dos campos textuais ou siglaTribunal deve ser preenchido.
- */
+export async function loginSaas(email: string, senha: string): Promise<{ token: string; usuario: UsuarioSessao }> {
+  const result = await apiFetch<{ token: string; usuario: UsuarioSessao }>('/api/v1/auth/login', {
+    method: 'POST',
+    body: { email, senha },
+  })
+  setStoredToken(result.token)
+  return result
+}
+
+export async function buscarSessaoAtual(): Promise<{ usuario: UsuarioSessao }> {
+  return apiFetch<{ usuario: UsuarioSessao }>('/api/v1/auth/me')
+}
+
+export async function buscarAdminOverview(): Promise<SaasAdminOverview> {
+  return apiFetch<SaasAdminOverview>('/api/v1/auth/usuarios')
+}
+
+// ─── Endpoints de Controladoria Local (PostgreSQL) ────────────────────────────
+
+export async function buscarDashboardLocal(numeroOab = '69161', ufOab = 'PR'): Promise<DashboardLocalResponse> {
+  return apiFetch<DashboardLocalResponse>('/api/v1/publicacoes/dashboard', {
+    params: { numeroOab, ufOab },
+  })
+}
+
+export async function buscarPublicacoesLocais(params: {
+  numeroOab?: string
+  ufOab?: string
+  status?: string
+  tribunal?: string
+  dataInicio?: string
+  dataFim?: string
+  pagina?: number
+  itensPorPagina?: number
+}): Promise<PaginatedResult<PublicacaoLocalDto>> {
+  const query: Record<string, string> = {}
+  if (params.numeroOab) query.numeroOab = params.numeroOab
+  if (params.ufOab) query.ufOab = params.ufOab
+  if (params.status) query.status = params.status
+  if (params.tribunal) query.tribunal = params.tribunal
+  if (params.dataInicio) query.dataInicio = params.dataInicio
+  if (params.dataFim) query.dataFim = params.dataFim
+  if (params.pagina != null) query.pagina = String(params.pagina)
+  if (params.itensPorPagina != null) query.itensPorPagina = String(params.itensPorPagina)
+
+  return apiFetch<PaginatedResult<PublicacaoLocalDto>>('/api/v1/publicacoes', { params: query })
+}
+
+export async function buscarProcessosLocais(params: {
+  numeroOab?: string
+  ufOab?: string
+  numeroProcesso?: string
+  tribunal?: string
+  pagina?: number
+  itensPorPagina?: number
+}): Promise<PaginatedResult<ProcessoResumoDto>> {
+  const query: Record<string, string> = {}
+  if (params.numeroOab) query.numeroOab = params.numeroOab
+  if (params.ufOab) query.ufOab = params.ufOab
+  if (params.numeroProcesso) query.numeroProcesso = params.numeroProcesso
+  if (params.tribunal) query.tribunal = params.tribunal
+  if (params.pagina != null) query.pagina = String(params.pagina)
+  if (params.itensPorPagina != null) query.itensPorPagina = String(params.itensPorPagina)
+
+  return apiFetch<PaginatedResult<ProcessoResumoDto>>('/api/v1/processos', { params: query })
+}
+
+export async function buscarPublicacoesDoProcessoLocal(
+  processoId: string,
+  pagina = 1,
+): Promise<PaginatedResult<PublicacaoLocalDto>> {
+  return apiFetch<PaginatedResult<PublicacaoLocalDto>>(`/api/v1/processos/${processoId}/publicacoes`, {
+    params: { pagina: String(pagina), itensPorPagina: '50' },
+  })
+}
+
+export async function atualizarStatusPublicacao(id: string, status: string): Promise<{ success: boolean }> {
+  return apiFetch<{ success: boolean }>(`/api/v1/publicacoes/${id}/status`, {
+    method: 'PATCH',
+    body: { status },
+  })
+}
+
+export async function sincronizarDjenAgora(dias = 14): Promise<{
+  numeroOab: string
+  ufOab: string
+  dataInicio: string
+  dataFim: string
+  totalComunicacoesEncontradas: number
+}> {
+  return apiFetch('/api/v1/publicacoes/sincronizar', {
+    method: 'POST',
+    body: { dias },
+  })
+}
+
+// ─── Endpoints DJEN Ao Vivo ───────────────────────────────────────────────────
+
 export async function buscarComunicacoes(
   params: BuscaParams,
 ): Promise<ComunicacaoResponse> {
@@ -88,22 +307,15 @@ export async function buscarComunicacoes(
   if (params.orgaoId != null)            query.orgaoId                    = String(params.orgaoId)
   if (params.pagina != null)             query.pagina                     = String(params.pagina)
 
-  // A API aceita apenas 5 ou 100 — default 100 para resultados completos
   query.itensPorPagina = String(params.itensPorPagina ?? 100)
 
-  return djenFetch<ComunicacaoResponse>('/api/v1/comunicacao', query)
+  return apiFetch<ComunicacaoResponse>('/api/v1/comunicacao', { params: query })
 }
 
-/**
- * Retorna a lista de tribunais com datas de último envio.
- */
 export async function buscarTribunais(): Promise<Tribunal[]> {
-  return djenFetch<Tribunal[]>('/api/v1/comunicacao/tribunal')
+  return apiFetch<Tribunal[]>('/api/v1/comunicacao/tribunal')
 }
 
-/**
- * Retorna a URL de uma certidão de comunicação pelo hash.
- */
 export function urlCertidao(hash: string): string {
   return `${OFICIAL_DJEN_URL}/api/v1/comunicacao/${hash}/certidao`
 }

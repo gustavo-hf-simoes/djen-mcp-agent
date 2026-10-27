@@ -33,4 +33,56 @@ export class DjenService {
   atualizarStatus(id: string, status: string) {
     return this.atualizarStatusCommandHandler.execute({ intimacaoId: id, status });
   }
+
+  async sincronizarRecentes(opcoes?: {
+    numeroOab?: string;
+    ufOab?: string;
+    dias?: number;
+  }): Promise<{
+    numeroOab: string;
+    ufOab: string;
+    dataInicio: string;
+    dataFim: string;
+    totalComunicacoesEncontradas: number;
+  }> {
+    const numeroOab = opcoes?.numeroOab?.trim() || '69161';
+    const ufOab = (opcoes?.ufOab?.trim() || 'PR').toUpperCase();
+    const dias = Math.max(1, Math.min(30, opcoes?.dias ?? 7));
+
+    const hoje = new Date();
+    const inicio = new Date(hoje);
+    inicio.setUTCDate(inicio.getUTCDate() - dias);
+    const dataFim = hoje.toISOString().slice(0, 10);
+    const dataInicio = inicio.toISOString().slice(0, 10);
+
+    const filtros = new URLSearchParams({
+      numeroOab,
+      ufOab,
+      dataDisponibilizacaoInicio: dataInicio,
+      dataDisponibilizacaoFim: dataFim,
+      pagina: '1',
+      itensPorPagina: '100'
+    });
+
+    const consulta = await this.consultarPublicacoes.execute(filtros);
+    const resultado = await this.capturarPagina.execute({
+      url: consulta.url,
+      filtros,
+      advogadoId: consulta.advogadoId
+    });
+
+    const count = typeof resultado.count === 'number'
+      ? resultado.count
+      : Array.isArray(resultado.items)
+        ? resultado.items.length
+        : 0;
+
+    return {
+      numeroOab,
+      ufOab,
+      dataInicio,
+      dataFim,
+      totalComunicacoesEncontradas: count
+    };
+  }
 }
