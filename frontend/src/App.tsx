@@ -1,9 +1,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Warning, Timer } from '@phosphor-icons/react'
+import { Warning, Timer, WhatsappLogo, FileText, Microphone, ChartBar, BookOpen, CurrencyDollar } from '@phosphor-icons/react'
 
 import { Layout } from './components/Layout'
-import type { ActiveTab } from './components/Header'
+import type { NavPageId } from './components/Sidebar'
 import { LoginScreen } from './components/LoginScreen'
 import { ControladoriaPanel } from './components/ControladoriaPanel'
 import { ProcessosPanel } from './components/ProcessosPanel'
@@ -115,12 +115,12 @@ function ResultsHeader({ total, filtered, hasClientFilter, siglaTribunal, oabNum
 type AppStatus = 'loading' | 'success' | 'error'
 
 export function App() {
-  const [usuario, setUsuario]           = useState<UsuarioSessao | null>(null)
-  const [checkingAuth, setCheckingAuth] = useState(true)
-  const [activeTab, setActiveTab]       = useState<ActiveTab>('controladoria')
-  const [syncing, setSyncing]           = useState(false)
-  const [syncMessage, setSyncMessage]   = useState<string | null>(null)
-  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [usuario, setUsuario]                 = useState<UsuarioSessao | null>(null)
+  const [checkingAuth, setCheckingAuth]       = useState(true)
+  const [activePage, setActivePage]           = useState<NavPageId>('djen_publicacoes')
+  const [syncing, setSyncing]                 = useState(false)
+  const [syncMessage, setSyncMessage]         = useState<string | null>(null)
+  const [refreshTrigger, setRefreshTrigger]   = useState(0)
 
   const [status, setStatus]             = useState<AppStatus>('loading')
   const [errorMsg, setErrorMsg]         = useState('')
@@ -135,7 +135,6 @@ export function App() {
     textoBusca: '',
   })
 
-  // Restaura sessão ao abrir
   useEffect(() => {
     const token = getStoredToken()
     if (!token) {
@@ -185,10 +184,10 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    if (usuario && activeTab === 'djen_live') {
+    if (usuario && activePage === 'djen_publicacoes') {
       void executeSearch({}, 1, usuario.oab.numero, usuario.oab.uf)
     }
-  }, [usuario, activeTab, executeSearch])
+  }, [usuario, activePage, executeSearch])
 
   async function handleSyncNow() {
     setSyncing(true)
@@ -270,8 +269,8 @@ export function App() {
   return (
     <Layout
       usuario={usuario}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
+      activePage={activePage}
+      onSelectPage={setActivePage}
       onSyncNow={() => void handleSyncNow()}
       syncing={syncing}
       onLogout={handleLogout}
@@ -292,21 +291,10 @@ export function App() {
         </div>
       )}
 
-      {activeTab === 'controladoria' && (
-        <ControladoriaPanel refreshTrigger={refreshTrigger} />
-      )}
-
-      {activeTab === 'processos' && (
-        <ProcessosPanel refreshTrigger={refreshTrigger} />
-      )}
-
-      {activeTab === 'saas_admin' && (
-        <SaasAdminPanel usuarioLogado={usuario} />
-      )}
-
-      {activeTab === 'djen_live' && (
-        <div className="flex flex-col lg:flex-row gap-6 lg:gap-10 lg:items-start">
-          <div className="w-full lg:w-60 lg:sticky lg:top-28 shrink-0">
+      {/* PÁGINA 1: PUBLICAÇÕES DJEN (Com Paginação no Topo e no Rodapé) */}
+      {activePage === 'djen_publicacoes' && (
+        <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-start">
+          <div className="w-full lg:w-60 lg:sticky lg:top-7 shrink-0">
             <FilterPanel loading={isLoading} tribunais={tribunaisDisponiveis} onFilter={handleFilter} />
           </div>
 
@@ -329,6 +317,16 @@ export function App() {
                   oabNumero={usuario.oab.numero}
                   oabUf={usuario.oab.uf}
                 />
+
+                {/* Paginação no Topo para evitar scroll de 100 itens */}
+                {!hasClientFilter && filteredItems.length > 0 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalItems={total}
+                    itemsPerPage={ITEMS_PER_PAGE}
+                    onPageChange={handlePageChange}
+                  />
+                )}
 
                 {filteredItems.length === 0
                   ? <EmptyState variant="no-results" />
@@ -360,6 +358,105 @@ export function App() {
             )}
           </div>
         </div>
+      )}
+
+      {/* PÁGINA 2: PASTAS DE PROCESSOS & CLIENTES (Com Download ZIP de Todas as Certidões) */}
+      {activePage === 'processos_pastas' && (
+        <ProcessosPanel refreshTrigger={refreshTrigger} />
+      )}
+
+      {/* PÁGINA 3: PRAZOS & PROVIDÊNCIAS DA CONTROLADORIA */}
+      {activePage === 'controladoria_prazos' && (
+        <ControladoriaPanel refreshTrigger={refreshTrigger} />
+      )}
+
+      {/* PÁGINA 4: OPERACIONAL WHATSAPP */}
+      {activePage === 'operacional_whatsapp' && (
+        <div
+          className="p-6 rounded-2xl space-y-4"
+          style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
+            >
+              <WhatsappLogo size={22} weight="bold" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
+                Módulo Operacional · Triagem WhatsApp & Pastas de Clientes
+              </h2>
+              <p className="text-xs" style={{ color: 'var(--color-ink-muted)' }}>
+                Coleta inteligente de documentos, transcrição de áudios e geração automática de procuração.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            <div
+              className="p-4 rounded-xl space-y-2"
+              style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
+                <Microphone size={15} style={{ color: 'var(--color-accent)' }} />
+                Transcrição de Áudios & Contexto do Caso
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
+                Converte áudios longos de clientes em resumo estruturado dos fatos para alimentar as petições iniciais e recursos.
+              </p>
+            </div>
+
+            <div
+              className="p-4 rounded-xl space-y-2"
+              style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
+            >
+              <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
+                <FileText size={15} style={{ color: 'var(--color-accent)' }} />
+                Checklist de Documentos (RCV / E-commerce) & ZapSign
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
+                Valida documentos enviados no WhatsApp (RG, CNH, Comprovante, Contrato) e gera procuração automática para assinatura digital.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PÁGINAS DE EXPANSÃO DO ECOSSISTEMA */}
+      {(activePage === 'inteligencia_jurisprudencia' ||
+        activePage === 'base_conhecimento' ||
+        activePage === 'financeiro_honorarios') && (
+        <div
+          className="p-6 rounded-2xl space-y-3"
+          style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              style={{ background: 'rgba(224,159,62,0.12)', color: 'var(--color-accent)' }}
+            >
+              {activePage === 'inteligencia_jurisprudencia' && <ChartBar size={20} weight="bold" />}
+              {activePage === 'base_conhecimento' && <BookOpen size={20} weight="bold" />}
+              {activePage === 'financeiro_honorarios' && <CurrencyDollar size={20} weight="bold" />}
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
+                {activePage === 'inteligencia_jurisprudencia' && 'Mapa de Calor de Jurisprudência'}
+                {activePage === 'base_conhecimento' && 'Base de Conhecimento & Modelos do Escritório'}
+                {activePage === 'financeiro_honorarios' && 'Gestão Financeira & Parcelamento de Honorários'}
+              </h2>
+              <p className="text-xs" style={{ color: 'var(--color-ink-muted)' }}>
+                Módulo mapeado na arquitetura do SaaS — pronto para especificação na próxima Sprint.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PÁGINA EXCLUSIVA DO PROPRIETÁRIO MASTER */}
+      {activePage === 'governanca_master' && usuario.role === 'MASTER' && (
+        <SaasAdminPanel usuarioLogado={usuario} />
       )}
     </Layout>
   )

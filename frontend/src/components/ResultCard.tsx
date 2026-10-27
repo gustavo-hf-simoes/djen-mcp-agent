@@ -33,10 +33,22 @@ function TipoBadge({ tipo }: { tipo: string }) {
   )
 }
 
+// ─── Decodificador seguro de entidades HTML (UTF-8 limpo) ─────────────────────
+
+function htmlToCleanText(html: string): string {
+  if (!html) return ''
+  if (typeof document !== 'undefined') {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html.replace(/<\/(p|div|tr|li|h[1-6]|section)>/gi, ' </$1>'), 'text/html')
+    return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim()
+  }
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
 // ─── Texto expandível ─────────────────────────────────────────────────────────
 
 function TextoComunicacao({ html, expanded }: { html: string; expanded: boolean }) {
-  const plain = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const plain = htmlToCleanText(html)
   const preview = plain.slice(0, 280)
   const hasMore = plain.length > 280
 
@@ -67,7 +79,7 @@ export const ResultCard = memo(function ResultCard({ comunicacao, index }: { com
   const partes    = comunicacao.destinatarios ?? []
 
   // Só mostra o botão "Ver texto completo" se houver conteúdo além do preview
-  const textoPlain = (comunicacao.texto ?? '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  const textoPlain = htmlToCleanText(comunicacao.texto ?? '')
   const hasMoreText = textoPlain.length > 280
 
   return (

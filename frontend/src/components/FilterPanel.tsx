@@ -76,7 +76,7 @@ export function FilterPanel({ loading, tribunais, onFilter }: FilterPanelProps) 
   return (
     <form onSubmit={handleSubmit}>
       {/* ── Card container ── */}
-      <div className="rounded-2xl overflow-hidden"
+      <div className="rounded-2xl overflow-hidden max-h-[calc(100dvh-6.5rem)] overflow-y-auto overscroll-contain"
         style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}>
 
         {/* Cabeçalho do card */}

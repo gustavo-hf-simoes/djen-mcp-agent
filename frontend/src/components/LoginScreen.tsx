@@ -1,68 +1,34 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Scales, LockKey, EnvelopeSimple, ShieldCheck, UserCircle, Code } from '@phosphor-icons/react'
+import { Scales, LockKey, EnvelopeSimple } from '@phosphor-icons/react'
 import { loginSaas, DjenError, type UsuarioSessao } from '../api/djen'
 
 interface LoginScreenProps {
   onSuccess: (usuario: UsuarioSessao) => void
 }
 
-const CONTAS_RAPIDAS = [
-  {
-    titulo: 'Gustavo (Master)',
-    subtitulo: 'Proprietário do SaaS',
-    email: 'gustavo@ghfs.adv.br',
-    senha: 'Master@2026',
-    badge: 'MASTER',
-    icon: ShieldCheck,
-    cor: '#e09f3e',
-  },
-  {
-    titulo: 'André Oliveira',
-    subtitulo: 'OAB 69.161/PR · Piloto',
-    email: 'andre@oliveira.adv.br',
-    senha: 'Andre@2026',
-    badge: 'ADVOGADO',
-    icon: UserCircle,
-    cor: '#4ade80',
-  },
-  {
-    titulo: 'Alessandro',
-    subtitulo: 'Desenvolvedor Front-end',
-    email: 'alessandro@ghfs.adv.br',
-    senha: 'Alessandro@2026',
-    badge: 'ADMIN_DEV',
-    icon: Code,
-    cor: '#60a5fa',
-  },
-]
-
 export function LoginScreen({ onSuccess }: LoginScreenProps) {
-  const [email, setEmail] = useState('gustavo@ghfs.adv.br')
-  const [senha, setSenha] = useState('Master@2026')
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
   const [loading, setLoading] = useState(false)
   const [erro, setErro] = useState('')
 
-  async function autenticar(emailLogin: string, senhaLogin: string) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
     setLoading(true)
     setErro('')
     try {
-      const { usuario } = await loginSaas(emailLogin, senhaLogin)
+      const { usuario } = await loginSaas(email, senha)
       onSuccess(usuario)
     } catch (err) {
       if (err instanceof DjenError) {
         setErro(err.message)
       } else {
-        setErro('Não foi possível conectar ao servidor SaaS (porta 3000).')
+        setErro('Não foi possível conectar ao servidor SaaS.')
       }
     } finally {
       setLoading(false)
     }
-  }
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    void autenticar(email, senha)
   }
 
   return (
@@ -92,28 +58,16 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             <Scales size={20} weight="bold" style={{ color: 'var(--color-accent-on)' }} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold tracking-tight" style={{ color: 'var(--color-ink)' }}>
-                GHFS Jurídico Agêntico
-              </h1>
-              <span
-                className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full"
-                style={{
-                  background: 'rgba(224,159,62,0.14)',
-                  color: 'var(--color-accent)',
-                  border: '1px solid rgba(224,159,62,0.3)',
-                }}
-              >
-                SaaS v1.0
-              </span>
-            </div>
+            <h1 className="text-base font-bold tracking-tight" style={{ color: 'var(--color-ink)' }}>
+              GHFS Jurídico
+            </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-faint)' }}>
-              Controladoria Autônoma · DJEN · Multi-Tenant
+              Acesse sua conta para continuar
             </p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={e => void handleSubmit(e)} className="p-6 space-y-4">
           {erro && (
             <div
               className="p-3 rounded-xl text-xs font-medium"
@@ -132,7 +86,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               className="text-[11px] font-semibold uppercase tracking-widest"
               style={{ color: 'var(--color-ink-faint)' }}
             >
-              E-mail Corporativo
+              E-mail
             </label>
             <div className="relative">
               <EnvelopeSimple
@@ -143,9 +97,10 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               <input
                 type="email"
                 required
+                placeholder="seu@email.com.br"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all"
+                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all placeholder:opacity-40"
                 style={{
                   background: 'var(--color-surface-input)',
                   border: '1px solid var(--color-edge)',
@@ -160,7 +115,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               className="text-[11px] font-semibold uppercase tracking-widest"
               style={{ color: 'var(--color-ink-faint)' }}
             >
-              Senha de Acesso
+              Senha
             </label>
             <div className="relative">
               <LockKey
@@ -171,9 +126,10 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               <input
                 type="password"
                 required
+                placeholder="••••••••"
                 value={senha}
                 onChange={e => setSenha(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all"
+                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all placeholder:opacity-40"
                 style={{
                   background: 'var(--color-surface-input)',
                   border: '1px solid var(--color-edge)',
@@ -193,68 +149,9 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
               boxShadow: '0 2px 14px rgba(224,159,62,0.25)',
             }}
           >
-            {loading ? 'Autenticando...' : 'Entrar no SaaS'}
+            {loading ? 'Autenticando...' : 'Entrar'}
           </button>
         </form>
-
-        <div
-          className="px-6 py-4 space-y-2.5"
-          style={{
-            borderTop: '1px solid var(--color-edge-subtle)',
-            background: 'var(--color-surface-overlay)',
-          }}
-        >
-          <p
-            className="text-[10px] font-semibold uppercase tracking-widest"
-            style={{ color: 'var(--color-ink-faint)' }}
-          >
-            Acesso Rápido (Ambiente Local de Homologação)
-          </p>
-          <div className="grid grid-cols-1 gap-2">
-            {CONTAS_RAPIDAS.map(conta => {
-              const Icon = conta.icon
-              return (
-                <button
-                  key={conta.email}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setEmail(conta.email)
-                    setSenha(conta.senha)
-                    void autenticar(conta.email, conta.senha)
-                  }}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all"
-                  style={{
-                    background: 'var(--color-surface-raised)',
-                    border: '1px solid var(--color-edge)',
-                  }}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <Icon size={16} weight="bold" style={{ color: conta.cor }} />
-                    <div className="truncate">
-                      <p className="text-xs font-semibold truncate" style={{ color: 'var(--color-ink)' }}>
-                        {conta.titulo}
-                      </p>
-                      <p className="text-[11px] truncate" style={{ color: 'var(--color-ink-faint)' }}>
-                        {conta.subtitulo}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0"
-                    style={{
-                      color: conta.cor,
-                      background: `${conta.cor}1a`,
-                      border: `1px solid ${conta.cor}40`,
-                    }}
-                  >
-                    {conta.badge}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
       </motion.div>
     </div>
   )

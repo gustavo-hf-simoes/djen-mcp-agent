@@ -21,6 +21,7 @@ export const API_ENDPOINTS = {
   publicacoes: '/api/v1/publicacoes',
   processos: '/api/v1/processos',
   processoPublicacoes: '/api/v1/processos/:id/publicacoes',
+  processoCertidoesZip: '/api/v1/processos/:id/certidoes-zip',
   tribunais: '/api/v1/tribunais',
   whatsappWebhook: '/webhook/whatsapp'
 } as const;
@@ -82,7 +83,7 @@ export function createApp(
     app.get(
       API_ENDPOINTS.authUsuarios,
       protect,
-      requireRole('MASTER', 'ADMIN_DEV'),
+      requireRole('MASTER'),
       (req, res) => authController.listarUsuariosETenants(req, res)
     );
   }
@@ -96,6 +97,7 @@ export function createApp(
     app.get(API_ENDPOINTS.publicacoesDashboard, protect, (req, res) => djenReadController.dashboard(req, res));
     app.get(API_ENDPOINTS.processos, protect, (req, res) => djenReadController.listarProcessos(req, res));
     app.get(API_ENDPOINTS.processoPublicacoes, protect, (req, res) => djenReadController.listarPublicacoesDoProcesso(req, res));
+    app.get(API_ENDPOINTS.processoCertidoesZip, protect, (req, res) => djenReadController.baixarCertidoesDoProcesso(req, res));
     app.get(API_ENDPOINTS.publicacoes, protect, (req, res) => djenReadController.listarPublicacoes(req, res));
     app.get(API_ENDPOINTS.tribunais, protect, (req, res) => djenReadController.listarTribunais(req, res));
   }

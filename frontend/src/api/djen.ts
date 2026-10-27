@@ -66,6 +66,10 @@ export interface DashboardLocalResponse {
 export interface ProcessoResumoDto {
   id: string
   numeroProcesso: string
+  numeroProcessoFormatado?: string
+  nomeClasse?: string | null
+  tituloPartes?: string | null
+  partes?: Array<{ nome: string; polo: string | null }>
   tribunal: string | null
   homepageTribunal: string | null
   orgaoJulgador: string | null
@@ -265,6 +269,30 @@ export async function buscarPublicacoesDoProcessoLocal(
   return apiFetch<PaginatedResult<PublicacaoLocalDto>>(`/api/v1/processos/${processoId}/publicacoes`, {
     params: { pagina: String(pagina), itensPorPagina: '50' },
   })
+}
+
+export async function baixarZipCertidoesDoProcesso(
+  processoId: string,
+  numeroProcessoFormatado?: string,
+): Promise<void> {
+  const url = `${BASE_URL}/api/v1/processos/${processoId}/certidoes-zip`
+  const token = getStoredToken()
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    throw new DjenError(`Falha ao gerar pacote de certidões (${response.status})`, response.status)
+  }
+  const blob = await response.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const safeName = (numeroProcessoFormatado ?? processoId).replace(/[^0-9A-Za-z.-]/g, '_')
+  link.href = blobUrl
+  link.download = `Certidoes_Processo_${safeName}.zip`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(blobUrl)
 }
 
 export async function atualizarStatusPublicacao(id: string, status: string): Promise<{ success: boolean }> {

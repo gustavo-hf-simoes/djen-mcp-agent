@@ -64,6 +64,21 @@ export class DjenReadController {
     return res.json({ items: this.service.listarTribunais() });
   }
 
+  async baixarCertidoesDoProcesso(req: Request, res: Response) {
+    try {
+      const processoId = req.params.id;
+      if (typeof processoId !== 'string' || !UUID_PATTERN.test(processoId)) {
+        return res.status(400).json({ error: 'ID de processo inválido.' });
+      }
+      const arquivo = await this.service.gerarZipCertidoesDoProcesso(processoId, toQuery(req));
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${arquivo.filename}"`);
+      return res.send(arquivo.zipBuffer);
+    } catch (error) {
+      return this.responderErro(res, error);
+    }
+  }
+
   private responderErro(res: Response, error: unknown) {
     if (error instanceof DjenReadValidationError) {
       return res.status(400).json({ error: error.message });

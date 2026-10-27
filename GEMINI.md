@@ -25,7 +25,17 @@ Este produto opera em formato **Monorepo** para contexto atômico dos agentes:
   2. **Senhas e Tokens:** Senhas devem usar `crypto.scrypt` com salt aleatório e comparação em tempo constante (`timingSafeEqual`).
   3. **Isolamento Multi-tenant:** Um usuário `ADVOGADO` jamais pode consultar ou modificar processos/intimações de outro `escritorio_id` / `advogado_id`.
 
-## 4. Fluxo de Desenvolvimento Agêntico (Spec-Driven)
+## 4. Diretrizes Obrigatórias de Usabilidade (UX Jurídica & Padrão de Mercado)
+A usabilidade intuitiva é o maior diferencial comercial do SaaS:
+1. **Linguagem do Advogado (Zero Jargão Técnico de TI):** Nunca exiba termos internos de banco/infraestrutura na UI (como `SHA-256`, `UUID`, `JSONB`). Priorize sempre **Nome do Cliente / Partes**, **Número do Processo Formatado (`NNNNNNN-DD.AAAA.J.TR.OOOO`)** e **Prazo Fatal**.
+2. **Navegação Escalável (Sidebar com Busca):** O sistema utiliza menu lateral recolhível (`Sidebar`) com filtro de busca instantânea para comportar o crescimento de módulos (Controladoria, Operacional WhatsApp, Jurisprudência, Base de Conhecimento, Financeiro e Governança Master).
+3. **Ergonomia de Leitura e Paginação:**
+   - Sempre decodificar entidades HTML (`&iacute;`, `&ccedil;`, etc.) para UTF-8 limpo tanto em visualizações recolhidas quanto expandidas.
+   - Em listagens longas, disponibilizar controles de paginação **no topo e no rodapé** para evitar rolagem excessiva.
+   - Painéis de filtro laterais devem ter scroll independente (`overscroll-contain`) sem arrastar a página principal.
+   - Manter fidelidade absoluta à paleta escura e badges semânticos criados pelo Alessandro (`Chumbo + Âmbar`).
+
+## 5. Fluxo de Desenvolvimento Agêntico (Spec-Driven)
 - Antes de escrever código complexo, utilize a skill `spec-architect` para transformar ideias brutas (áudios do Gustavo ou documentos do André) em especificações técnicas executáveis (`docs/specs/`).
 - Para implementar banco, backend e frontend ponta a ponta, utilize a skill `fullstack-builder`.
 - Para construir orquestradores, subagentes jurídicos e tools determinísticas, utilize a skill `ai-agent-designer`.

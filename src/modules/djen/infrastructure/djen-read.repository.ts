@@ -21,6 +21,7 @@ export interface ProcessoResumoRow {
   ultima_publicacao_id: string | null;
   ultimo_status: string | null;
   ultima_tipo: string | null;
+  ultima_dados_djen?: unknown;
 }
 
 export interface PaginatedRows<T> {
@@ -77,7 +78,8 @@ export class DjenReadRepository implements DjenReadRepositoryPort {
                 MAX(COALESCE(i.data_publicacao, i.data_disponibilizacao))::text AS ultima_data_publicacao,
                 (ARRAY_AGG(i.id::text ORDER BY COALESCE(i.data_publicacao, i.data_disponibilizacao) DESC NULLS LAST, i.id DESC))[1] AS ultima_publicacao_id,
                 (ARRAY_AGG(i.status_leitura ORDER BY COALESCE(i.data_publicacao, i.data_disponibilizacao) DESC NULLS LAST, i.id DESC))[1] AS ultimo_status,
-                (ARRAY_AGG(COALESCE(i.dados_djen->>'tipoComunicacao', i.dados_djen->>'tipo_comunicacao') ORDER BY COALESCE(i.data_publicacao, i.data_disponibilizacao) DESC NULLS LAST, i.id DESC))[1] AS ultima_tipo
+                (ARRAY_AGG(COALESCE(i.dados_djen->>'tipoComunicacao', i.dados_djen->>'tipo_comunicacao') ORDER BY COALESCE(i.data_publicacao, i.data_disponibilizacao) DESC NULLS LAST, i.id DESC))[1] AS ultima_tipo,
+                (ARRAY_AGG(i.dados_djen ORDER BY COALESCE(i.data_publicacao, i.data_disponibilizacao) DESC NULLS LAST, i.id DESC))[1] AS ultima_dados_djen
          FROM processos p
          JOIN intimacoes i ON i.processo_id = p.id
          JOIN advogados a ON a.id = i.advogado_id

@@ -11,6 +11,7 @@ import {
   Gavel,
   ArrowSquareOut,
   CaretDown,
+  Users,
 } from '@phosphor-icons/react'
 import {
   buscarDashboardLocal,
@@ -29,10 +30,10 @@ interface ControladoriaPanelProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: 'PENDENTE',       label: 'Pendente Triagem', color: '#e09f3e' },
-  { value: 'EM_ANALISE',     label: 'Em Análise IA',    color: '#60a5fa' },
-  { value: 'MINUTA_PRONTA',  label: 'Minuta Pronta',    color: '#a78bfa' },
-  { value: 'CONCLUIDA',      label: 'Concluída',        color: '#4ade80' },
+  { value: 'PENDENTE',       label: 'Pendente de Leitura', color: '#e09f3e' },
+  { value: 'EM_ANALISE',     label: 'Em Elaboração',       color: '#60a5fa' },
+  { value: 'MINUTA_PRONTA',  label: 'Minuta Pronta',       color: '#a78bfa' },
+  { value: 'CONCLUIDA',      label: 'Concluída',           color: '#4ade80' },
 ]
 
 export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) {
@@ -97,31 +98,31 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
 
   return (
     <div className="space-y-6">
-      {/* KPIs da Controladoria */}
+      {/* Resumo Executivo do Escritório */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
-            titulo: 'Processos Monitorados',
+            titulo: 'Processos Ativos',
             valor: dashboard?.contagens.totalProcessos ?? 0,
-            subtitulo: 'Pastas CNJ ativas no banco',
+            subtitulo: 'Pastas de clientes com movimentação',
             cor: '#60a5fa',
           },
           {
-            titulo: 'Total de Publicações',
+            titulo: 'Publicações Arquivadas',
             valor: dashboard?.contagens.totalPublicacoes ?? 0,
-            subtitulo: 'Auditadas com SHA-256',
-            cor: '#a1a1aa',
+            subtitulo: 'Histórico salvo no escritório',
+            cor: '#d4d4d8',
           },
           {
-            titulo: 'Pendentes de Providência',
+            titulo: 'Pendentes de Leitura',
             valor: pendentesCount,
-            subtitulo: 'Aguardando controladoria / IA',
+            subtitulo: 'Intimações aguardando providência',
             cor: '#e09f3e',
           },
           {
-            titulo: 'Tratadas / Concluídas',
+            titulo: 'Providências Concluídas',
             valor: concluidasCount,
-            subtitulo: 'Prazos conferidos',
+            subtitulo: 'Prazos já cumpridos ou arquivados',
             cor: '#4ade80',
           },
         ].map(kpi => (
@@ -133,7 +134,7 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
               border: '1px solid var(--color-edge)',
             }}
           >
-            <p className="text-xs font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+            <p className="text-xs font-medium" style={{ color: 'var(--color-ink-muted)' }}>
               {kpi.titulo}
             </p>
             <p className="text-2xl font-bold mt-1 font-mono" style={{ color: kpi.cor }}>
@@ -153,7 +154,7 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
       >
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold mr-1" style={{ color: 'var(--color-ink-muted)' }}>
-            Status na Controladoria:
+            Etapa:
           </span>
           <button
             type="button"
@@ -183,13 +184,13 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
           ))}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="w-full sm:w-64">
           <input
             type="text"
-            placeholder="Filtrar Tribunal (ex: TJSP, TJPR)..."
+            placeholder="Tribunal (ex: TJSP, TJPR)"
             value={tribunalFilter}
             onChange={e => { setTribunalFilter(e.target.value.toUpperCase()); setPage(1) }}
-            className="h-9 px-3 rounded-lg text-xs font-mono outline-none"
+            className="w-full h-9 px-3 rounded-lg text-xs font-mono outline-none"
             style={{
               background: 'var(--color-surface-input)',
               border: '1px solid var(--color-edge)',
@@ -198,6 +199,16 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
           />
         </div>
       </div>
+
+      {/* Paginação no Topo */}
+      {!loading && items.length > 0 && (
+        <Pagination
+          currentPage={page}
+          totalItems={total}
+          itemsPerPage={20}
+          onPageChange={setPage}
+        />
+      )}
 
       {loading ? (
         <LoadingState />
@@ -252,7 +263,6 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                         </span>
                       )}
 
-                      {/* Badge de Prazo da Controladoria */}
                       {temPrazoCalculado ? (
                         <span
                           className="flex items-center gap-1.5 text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full"
@@ -263,14 +273,14 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                           }}
                         >
                           <Clock size={12} weight="bold" />
-                          Prazo Estimado ({prazo.diasUteis}d úteis): {prazo.dataFinal}
+                          Prazo ({prazo.diasUteis} dias úteis): {prazo.dataFinal}
                         </span>
                       ) : (
                         <span
                           className="flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full"
                           style={{
                             background: 'var(--color-surface-overlay)',
-                            color: 'var(--color-ink-faint)',
+                            color: 'var(--color-ink-muted)',
                           }}
                         >
                           <CalendarBlank size={12} />
@@ -279,7 +289,6 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                       )}
                     </div>
 
-                    {/* Seletor de Status da Tarefa */}
                     <div className="flex items-center gap-2">
                       <CheckCircle size={14} weight="bold" style={{ color: statusObj.color }} />
                       <select
@@ -305,12 +314,20 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                     </div>
                   </div>
 
-                  {/* Número CNJ + Órgão */}
-                  <div>
+                  {/* Partes e Número CNJ */}
+                  <div className="space-y-1">
+                    {pub.partes.length > 0 && (
+                      <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
+                        <Users size={13} style={{ color: 'var(--color-accent)' }} />
+                        <span>
+                          {pub.partes.map(p => `${p.polo ? `[${p.polo}] ` : ''}${p.nome}`).join(' × ')}
+                        </span>
+                      </div>
+                    )}
                     <p className="font-mono text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
                       {pub.numeroProcesso}
                     </p>
-                    <div className="flex items-center gap-2 mt-1 text-xs" style={{ color: 'var(--color-ink-faint)' }}>
+                    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-ink-muted)' }}>
                       {pub.nomeOrgao && (
                         <span className="flex items-center gap-1">
                           <Buildings size={12} />
@@ -325,14 +342,12 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                     </div>
                   </div>
 
-                  {/* Texto Limpo */}
-                  <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-ink-muted)' }}>
+                  <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: 'var(--color-ink)' }}>
                     {isExpanded ? pub.texto : pub.texto.slice(0, 320)}
                     {!isExpanded && pub.texto.length > 320 ? ' …' : ''}
                   </p>
                 </div>
 
-                {/* Rodapé de Ações Rápidas */}
                 <div
                   className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap"
                   style={{
@@ -340,13 +355,13 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                     background: 'var(--color-surface-overlay)',
                   }}
                 >
-                  <div className="flex items-center gap-3">
+                  <div>
                     {pub.texto.length > 320 && (
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : pub.id)}
                         className="flex items-center gap-1 text-xs font-medium"
-                        style={{ color: 'var(--color-ink-faint)' }}
+                        style={{ color: 'var(--color-ink-muted)' }}
                       >
                         <CaretDown size={12} className={isExpanded ? 'rotate-180' : ''} />
                         {isExpanded ? 'Recolher teor' : 'Ler teor completo'}
@@ -390,7 +405,7 @@ export function ControladoriaPanel({ refreshTrigger }: ControladoriaPanelProps) 
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
                         style={{ color: 'var(--color-accent)' }}
                       >
-                        Abrir Tribunal
+                        Inteiro teor
                         <ArrowSquareOut size={12} />
                       </a>
                     )}
