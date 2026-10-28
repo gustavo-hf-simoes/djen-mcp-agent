@@ -56,13 +56,6 @@ async function bootstrap() {
   try {
     await authService.garantirSeedInicial();
     console.log('🔐 Controle de acesso SaaS (RBAC Master/Admin/Advogado) verificado.');
-
-    const existingClients = await whatsappService.listarClientes();
-    if (existingClients.length === 0) {
-      await whatsappService.simularFluxoRealista('ECOMMERCE_ML');
-      await whatsappService.simularFluxoRealista('RCV_BANCARIO');
-      console.log('📲 Dossiês iniciais de demonstração (Mercado Livre & RCV Bancário) gerados na Triagem WhatsApp.');
-    }
   } catch (err: any) {
     console.warn('⚠️ Aviso ao verificar seed inicial SaaS:', err.message);
   }

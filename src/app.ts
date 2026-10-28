@@ -29,7 +29,7 @@ export const API_ENDPOINTS = {
   operacionalClienteDossie: '/api/v1/operacional/clientes/:id/dossie',
   operacionalClienteChecklist: '/api/v1/operacional/clientes/:id/checklist',
   operacionalConfig: '/api/v1/operacional/config',
-  operacionalSimular: '/api/v1/operacional/simular-fluxo',
+  politicaPrivacidade: '/politica-de-privacidade',
   whatsappWebhook: '/webhook/whatsapp'
 } as const;
 
@@ -115,8 +115,23 @@ export function createApp(
     app.patch(API_ENDPOINTS.operacionalClienteChecklist, protect, (req, res) => whatsappController.atualizarChecklistCliente(req, res));
     app.get(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.obterConfiguracao(req, res));
     app.put(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.salvarConfiguracao(req, res));
-    app.post(API_ENDPOINTS.operacionalSimular, protect, (req, res) => whatsappController.simularFluxo(req, res));
   }
+
+  app.get(API_ENDPOINTS.politicaPrivacidade, (_req, res) => {
+    res
+      .status(200)
+      .type('text/html; charset=utf-8')
+      .send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><title>Política de Privacidade - GHFS Jurídico SaaS</title></head>
+<body style="font-family:sans-serif;max-width:720px;margin:40px auto;line-height:1.6;color:#111">
+  <h1>Política de Privacidade e Proteção de Dados (LGPD) — GHFS Jurídico</h1>
+  <p>O sistema <strong>GHFS Jurídico</strong> processa comunicações judiciais (DJEN) e mensagens de triagem via WhatsApp Business Cloud API exclusivamente em nome dos escritórios de advocacia contratantes.</p>
+  <p>Todos os dados pessoais, números de telefone, áudios e documentos são armazenados com criptografia autenticada (AES-256-GCM) e utilizados unicamente para instrução processual e atendimento jurídico autorizado pelo titular.</p>
+  <p>Para solicitar exclusão de dados ou esclarecimentos: <code>gustavo@ghfs.adv.br</code>.</p>
+</body>
+</html>`);
+  });
 
   // Serve o build estático do Frontend (Monorepo unificado para Túnel ou Deploy em Nuvem)
   const frontendDistPath = join(process.cwd(), 'frontend', 'dist');

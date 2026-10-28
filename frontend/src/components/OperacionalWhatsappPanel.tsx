@@ -9,11 +9,12 @@ import {
   Copy,
   Check,
   GearSix,
-  Lightning,
+  ArrowsClockwise,
   UserCheck,
   WarningCircle,
   LinkSimple,
   Sparkle,
+  ShieldCheck,
 } from '@phosphor-icons/react'
 import {
   buscarClientesOperacional,
@@ -21,7 +22,6 @@ import {
   atualizarChecklistCliente,
   buscarConfiguracaoWhatsapp,
   salvarConfiguracaoWhatsapp,
-  simularFluxoWhatsapp,
   type ClienteTriagemResumo,
   type DossieClienteCompleto,
   type ConfiguracaoWhatsappTenant,
@@ -72,7 +72,7 @@ export function OperacionalWhatsappPanel() {
   const [dossie, setDossie] = useState<DossieClienteCompleto | null>(null)
   const [loadingList, setLoadingList] = useState(true)
   const [loadingDossie, setLoadingDossie] = useState(false)
-  const [simulating, setSimulating] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Configuração do Webhook Meta Cloud API (Multi-tenant)
   const [showConfig, setShowConfig] = useState(false)
@@ -87,34 +87,42 @@ export function OperacionalWhatsappPanel() {
   const [copiedDossie, setCopiedDossie] = useState(false)
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false)
   const [copiedVerifyToken, setCopiedVerifyToken] = useState(false)
+  const [copiedPrivacyUrl, setCopiedPrivacyUrl] = useState(false)
 
-  const carregarClientes = useCallback(async (keepSelected = true) => {
-    setLoadingList(true)
+  const carregarClientes = useCallback(async (silent = false) => {
+    if (!silent) setLoadingList(true)
     try {
-      const res = await buscarClientesOperacional()
+      const [res, cfg] = await Promise.all([
+        buscarClientesOperacional(),
+        buscarConfiguracaoWhatsapp().catch(() => null),
+      ])
+      if (cfg) setConfig(cfg)
       setClientes(res.items)
       if (res.items.length > 0) {
         setSelectedId(prev => {
-          if (keepSelected && prev && res.items.some(c => c.id === prev)) return prev
+          if (prev && res.items.some(c => c.id === prev)) return prev
           return res.items[0]!.id
         })
+      } else {
+        setSelectedId(null)
+        setDossie(null)
       }
     } catch (err) {
       console.error('Falha ao listar clientes da triagem:', err)
     } finally {
-      setLoadingList(false)
+      if (!silent) setLoadingList(false)
     }
   }, [])
 
-  const carregarDossie = useCallback(async (clienteId: string) => {
-    setLoadingDossie(true)
+  const carregarDossie = useCallback(async (clienteId: string, silent = false) => {
+    if (!silent) setLoadingDossie(true)
     try {
       const res = await buscarDossieCliente(clienteId)
       setDossie(res)
     } catch (err) {
       console.error('Falha ao carregar dossiê do cliente:', err)
     } finally {
-      setLoadingDossie(false)
+      if (!silent) setLoadingDossie(false)
     }
   }, [])
 
@@ -131,9 +139,30 @@ export function OperacionalWhatsappPanel() {
 
   useEffect(() => {
     if (selectedId) {
-      void carregarDossie(selectedId)
+      void carregarDossie(selectedId, false)
     }
   }, [selectedId, carregarDossie])
+
+  // Atualização em tempo real (a cada 5s) para exibir mensagens recebidas do celular sem precisar dar F5
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void carregarClientes(true)
+      if (selectedId) {
+        void carregarDossie(selectedId, true)
+      }
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [carregarClientes, carregarDossie, selectedId])
+
+  async function handleManualRefresh() {
+    setRefreshing(true)
+    try {
+      await carregarClientes(true)
+      if (selectedId) await carregarDossie(selectedId, true)
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function handleToggleChecklistItem(itemKey: string, recebidoAtual: boolean) {
     if (!dossie) return
@@ -162,17 +191,6 @@ export function OperacionalWhatsappPanel() {
     }
   }
 
-  async function handleSimular(cenario: 'ECOMMERCE_ML' | 'RCV_BANCARIO') {
-    setSimulating(true)
-    try {
-      await simularFluxoWhatsapp(cenario)
-      await carregarClientes(true)
-      if (selectedId) await carregarDossie(selectedId)
-    } finally {
-      setSimulating(false)
-    }
-  }
-
   async function handleSalvarConfig(e: React.FormEvent) {
     e.preventDefault()
     setSavingConfig(true)
@@ -183,7 +201,7 @@ export function OperacionalWhatsappPanel() {
         whatsappDisplayPhone: displayPhoneInput,
       })
       setConfig(atualizado)
-      setConfigSavedMsg('Configuração multi-tenant salva! O Webhook já roteia eventos deste Phone Number ID para o escritório.')
+      setConfigSavedMsg('Vínculo salvo! O Webhook já roteia eventos deste Phone Number ID para o escritório.')
     } catch {
       setConfigSavedMsg('Erro ao salvar configuração.')
     } finally {
@@ -251,6 +269,7 @@ export function OperacionalWhatsappPanel() {
   }
 
   const webhookCallbackUrl = `${window.location.origin}/webhook/whatsapp`
+  const privacyPolicyUrl = `${window.location.origin}/politica-de-privacidade`
   const verifyTokenValue = config?.verifyToken ?? 'djen-meta-verify-2026'
 
   return (
@@ -280,11 +299,16 @@ export function OperacionalWhatsappPanel() {
                   border: '1px solid rgba(74,222,128,0.25)',
                 }}
               >
-                Webhook Meta Oficial Ativo
+                Escuta em Tempo Real (5s)
               </span>
+              {config?.ultimoWebhookEm && (
+                <span className="text-[10px]" style={{ color: 'var(--color-ink-faint)' }}>
+                  Último evento Meta: {formatHoraData(config.ultimoWebhookEm)}
+                </span>
+              )}
             </div>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-muted)' }}>
-              Unifica mensagens picadas, áudios transcritos e fotos avulsas explicadas na conversa em uma pasta pronta para a petição inicial.
+              Recebe mensagens, áudios e documentos enviados pelos clientes na API Oficial da Meta e organiza a pasta para a inicial.
             </p>
           </div>
         </div>
@@ -292,8 +316,7 @@ export function OperacionalWhatsappPanel() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
-            disabled={simulating}
-            onClick={() => void handleSimular('ECOMMERCE_ML')}
+            onClick={() => void handleManualRefresh()}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
             style={{
               background: 'var(--color-surface-overlay)',
@@ -301,23 +324,8 @@ export function OperacionalWhatsappPanel() {
               color: 'var(--color-ink)',
             }}
           >
-            <Lightning size={14} style={{ color: '#fbbf24' }} weight="fill" />
-            Simular Caso Mercado Livre
-          </button>
-
-          <button
-            type="button"
-            disabled={simulating}
-            onClick={() => void handleSimular('RCV_BANCARIO')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer"
-            style={{
-              background: 'var(--color-surface-overlay)',
-              border: '1px solid var(--color-edge)',
-              color: 'var(--color-ink)',
-            }}
-          >
-            <Lightning size={14} style={{ color: '#60a5fa' }} weight="fill" />
-            Simular Caso Bancário (RCV)
+            <ArrowsClockwise size={14} className={refreshing ? 'animate-spin' : ''} weight="bold" />
+            Atualizar Fila
           </button>
 
           <button
@@ -331,13 +339,13 @@ export function OperacionalWhatsappPanel() {
             }}
           >
             <GearSix size={15} weight="bold" />
-            Conectar Meu Celular (Meta API)
+            Configuração Meta Cloud API
           </button>
         </div>
       </div>
 
-      {/* GAVETA DE CONFIGURAÇÃO DO WEBHOOK META PARA TESTE REAL NO CELULAR E MULTI-TENANT */}
-      {showConfig && (
+      {/* GAVETA DE CONFIGURAÇÃO DO WEBHOOK META (IMPLANTACAO SAAS POR ESCRITÓRIO) */}
+      {(showConfig || clientes.length === 0) && (
         <div
           className="p-5 rounded-2xl space-y-4"
           style={{
@@ -347,35 +355,36 @@ export function OperacionalWhatsappPanel() {
         >
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--color-accent)' }}>
-                Passo a Passo · Testar com Seu Próprio Celular na Meta WhatsApp Cloud API (Custo R$ 0,00)
+              <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-accent)' }}>
+                <ShieldCheck size={16} weight="fill" />
+                Guia de Implantação do Escritório · Meta WhatsApp Cloud API Oficial
               </h3>
-              <p className="text-xs mt-1" style={{ color: 'var(--color-ink-muted)' }}>
-                Na Meta for Developers, toda conversa iniciada pelo cliente (Service Conversation) é <strong>100% gratuita</strong> dentro da janela de 24h, além de fornecer um número Sandbox gratuito para você mandar mensagens do seu próprio WhatsApp pessoal agora mesmo.
+              <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
+                Para que a Meta envie as mensagens reais do celular para este painel (em vez de retê-las apenas na <em>Etapa 1. Experimente</em>), conclua os <strong>3 passos obrigatórios da Meta</strong> abaixo:
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Coluna 1: Dados do Webhook para colar no painel da Meta */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Passo 1: URLs e Tokens para colar na Meta */}
             <div
               className="p-4 rounded-xl space-y-3"
               style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
             >
-              <p className="text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
-                1. Cole estes dados em <em>WhatsApp &gt; Configuration &gt; Webhook</em> no painel da Meta:
+              <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
+                Passo 1 · Webhook (Etapa 2 da Meta)
               </p>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                  Callback URL (URL de Retorno Pública HTTPS)
+                  URL de Callback (HTTPS)
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     readOnly
                     value={webhookCallbackUrl}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-mono"
                     style={{
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-edge)',
@@ -395,22 +404,22 @@ export function OperacionalWhatsappPanel() {
                       color: 'var(--color-accent)',
                     }}
                   >
-                    {copiedWebhookUrl ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedWebhookUrl ? 'Copiado' : 'Copiar'}
+                    {copiedWebhookUrl ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedWebhookUrl ? 'OK' : 'Copiar'}
                   </button>
                 </div>
               </div>
 
               <div className="space-y-1">
                 <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                  Verify Token (Token de Verificação)
+                  Verificar Token (Verify Token)
                 </label>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     readOnly
                     value={verifyTokenValue}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-mono"
                     style={{
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-edge)',
@@ -430,34 +439,82 @@ export function OperacionalWhatsappPanel() {
                       color: 'var(--color-accent)',
                     }}
                   >
-                    {copiedVerifyToken ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedVerifyToken ? 'Copiado' : 'Copiar'}
+                    {copiedVerifyToken ? <Check size={13} /> : <Copy size={13} />}
+                    {copiedVerifyToken ? 'OK' : 'Copiar'}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Coluna 2: Vínculo Multi-tenant do Phone Number ID do Escritório */}
+            {/* Passo 2: Assinar o campo "messages" e Chave "Ao Vivo" */}
+            <div
+              className="p-4 rounded-xl space-y-2.5"
+              style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
+            >
+              <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
+                Passo 2 · Liberar Disparo Externo na Meta
+              </p>
+              <ul className="text-xs space-y-1.5 leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
+                <li>
+                  • Em <strong>Campos do webhook</strong> (Etapa 2), role a tabela até a letra <strong>M</strong>, ative a chave <strong>Assinar</strong> na linha <code>messages</code> e clique em <strong>Teste</strong>.
+                </li>
+                <li>
+                  • Para que mensagens do seu celular não fiquem retidas no modo de desenvolvimento, vire a chave no topo da Meta para <strong>Ao vivo</strong>. Caso a Meta peça a <em>URL da Política de Privacidade</em> em <em>Configurações do app &gt; Básico</em>, use o link abaixo:
+                </li>
+              </ul>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  readOnly
+                  value={privacyPolicyUrl}
+                  className="w-full px-2.5 py-1.5 rounded-lg text-[11px] font-mono"
+                  style={{
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-edge)',
+                    color: 'var(--color-ink)',
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(privacyPolicyUrl)
+                    setCopiedPrivacyUrl(true)
+                    setTimeout(() => setCopiedPrivacyUrl(false), 2000)
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-semibold shrink-0 cursor-pointer flex items-center gap-1"
+                  style={{
+                    background: 'rgba(224,159,62,0.14)',
+                    color: 'var(--color-accent)',
+                  }}
+                >
+                  {copiedPrivacyUrl ? <Check size={13} /> : <Copy size={13} />}
+                  {copiedPrivacyUrl ? 'OK' : 'Copiar'}
+                </button>
+              </div>
+            </div>
+
+            {/* Passo 3: Vínculo Multi-tenant do Phone Number ID do Escritório */}
             <form
               onSubmit={e => void handleSalvarConfig(e)}
               className="p-4 rounded-xl space-y-3"
               style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
             >
-              <p className="text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
-                2. Roteamento Multi-Tenant do Escritório ({config?.escritorioNome ?? 'Escritório Piloto'}):
+              <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
+                Passo 3 · Vínculo do Escritório ({config?.escritorioNome ?? 'Escritório Piloto'})
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                    Meta Phone Number ID (Opcional no Sandbox)
+                    Identificação do Número de Telefone (Phone Number ID)
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: 105928374651928"
+                    placeholder="Ex: 1461573947028881"
                     value={phoneIdInput}
                     onChange={e => setPhoneIdInput(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
                     style={{
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-edge)',
@@ -468,14 +525,14 @@ export function OperacionalWhatsappPanel() {
 
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                    Número WhatsApp do Escritório
+                    Número WhatsApp Vinculado
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: +55 41 99999-0000"
+                    placeholder="Ex: 5543996034632"
                     value={displayPhoneInput}
                     onChange={e => setDisplayPhoneInput(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs"
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
                     style={{
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-edge)',
@@ -485,10 +542,7 @@ export function OperacionalWhatsappPanel() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 pt-1">
-                <span className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
-                  Se deixado em branco durante seu teste, qualquer mensagem recebida no Webhook cairá neste escritório piloto.
-                </span>
+              <div className="flex items-center justify-end gap-3 pt-1">
                 <button
                   type="submit"
                   disabled={savingConfig}
@@ -530,9 +584,13 @@ export function OperacionalWhatsappPanel() {
               Carregando fila de atendimento...
             </div>
           ) : clientes.length === 0 ? (
-            <div className="p-4 text-xs text-center space-y-2" style={{ color: 'var(--color-ink-faint)' }}>
-              <p>Nenhum cliente recebido ainda.</p>
-              <p>Clique em <strong>Simular Caso</strong> acima ou envie um "Oi" do seu celular.</p>
+            <div className="p-5 text-xs text-center space-y-2" style={{ color: 'var(--color-ink-muted)' }}>
+              <p className="font-semibold" style={{ color: 'var(--color-ink)' }}>
+                Aguardando primeira mensagem real
+              </p>
+              <p className="leading-relaxed">
+                Assim que a Meta disparar o evento <code>messages</code> para o nosso Webhook, o contato aparecerá automaticamente aqui.
+              </p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[680px] overflow-y-auto overscroll-contain pr-1">
@@ -600,8 +658,13 @@ export function OperacionalWhatsappPanel() {
           style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
         >
           {!dossie || loadingDossie ? (
-            <div className="p-8 text-xs text-center" style={{ color: 'var(--color-ink-faint)' }}>
-              Carregando histórico cronológico e transcrições do cliente...
+            <div className="p-8 text-xs text-center space-y-2" style={{ color: 'var(--color-ink-faint)' }}>
+              <p className="font-semibold" style={{ color: 'var(--color-ink-muted)' }}>
+                Linha do Tempo da Conversa
+              </p>
+              <p>
+                Quando um cliente da fila ao lado é selecionado, todas as mensagens de texto, áudios transcritos e documentos aparecem aqui em ordem cronológica.
+              </p>
             </div>
           ) : (
             <>
@@ -756,8 +819,13 @@ export function OperacionalWhatsappPanel() {
           style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
         >
           {!dossie ? (
-            <div className="p-6 text-xs text-center" style={{ color: 'var(--color-ink-faint)' }}>
-              Selecione um cliente na fila ao lado para abrir a pasta.
+            <div className="p-6 text-xs text-center space-y-2" style={{ color: 'var(--color-ink-faint)' }}>
+              <p className="font-semibold" style={{ color: 'var(--color-ink-muted)' }}>
+                Checklist Documental & Dossiê
+              </p>
+              <p>
+                Exibirá automaticamente os documentos obrigatórios (RCV Bancário ou E-commerce) e o botão de cobrança no WhatsApp assim que o cliente iniciar o contato.
+              </p>
             </div>
           ) : (
             <>

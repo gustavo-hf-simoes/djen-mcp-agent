@@ -26,6 +26,8 @@ export interface WhatsAppWebhookServicePort {
     escritorioNome: string;
     whatsappPhoneNumberId: string;
     whatsappDisplayPhone: string;
+    totalEventosRecebidos?: number;
+    ultimoWebhookEm?: string | null;
   }>;
   salvarConfiguracaoTenant?(
     escritorioId: string | undefined,
@@ -35,10 +37,9 @@ export interface WhatsAppWebhookServicePort {
     escritorioNome: string;
     whatsappPhoneNumberId: string;
     whatsappDisplayPhone: string;
+    totalEventosRecebidos?: number;
+    ultimoWebhookEm?: string | null;
   }>;
-  simularFluxoRealista?(
-    cenario?: 'ECOMMERCE_ML' | 'RCV_BANCARIO'
-  ): Promise<{ mensagens: number; duplicado: boolean }>;
 }
 
 export interface WhatsAppWebhookConfig {
@@ -67,8 +68,10 @@ export class WhatsAppWebhookController {
       typeof challenge === 'string' &&
       constantTimeTextEqual(token, this.config.verifyToken)
     ) {
+      console.log('✅ [Meta Webhook] Handshake GET verificado com sucesso.');
       return res.status(200).type('text/plain').send(challenge);
     }
+    console.warn('⚠️ [Meta Webhook] Falha na verificação GET (token divergente).');
     return res.sendStatus(403);
   }
 
@@ -83,15 +86,19 @@ export class WhatsAppWebhookController {
       this.config.appSecret &&
       !verifyMetaSignature(req.body, req.header('x-hub-signature-256'), this.config.appSecret)
     ) {
+      console.warn('⚠️ [Meta Webhook] Assinatura x-hub-signature-256 inválida.');
       return res.status(401).json({ error: 'Assinatura inválida.' });
     }
 
     try {
       const resultado = await this.service.receberWebhook(req.body);
+      console.log(
+        `📲 [Meta Webhook] Evento processado: ${resultado.mensagens} mensagem(ns) salva(s) (duplicado=${resultado.duplicado}).`
+      );
       return res.status(200).json({ success: true, ...resultado });
     } catch (error) {
       const codigo = error instanceof Error ? error.message : 'ERRO_DESCONHECIDO';
-      console.error('Falha ao persistir webhook WhatsApp:', codigo);
+      console.error('❌ [Meta Webhook] Falha ao persistir webhook WhatsApp:', codigo);
       const status = codigo === 'CONFIGURACAO_DE_CIFRAGEM_AUSENTE' ? 503 : 500;
       return res.status(status).json({ error: 'Não foi possível persistir o webhook.' });
     }
@@ -156,7 +163,9 @@ export class WhatsAppWebhookController {
             escritorioId: escritorioId ?? null,
             escritorioNome: 'Escritório Piloto',
             whatsappPhoneNumberId: '',
-            whatsappDisplayPhone: ''
+            whatsappDisplayPhone: '',
+            totalEventosRecebidos: 0,
+            ultimoWebhookEm: null
           };
 
       return res.status(200).json({
@@ -191,24 +200,6 @@ export class WhatsAppWebhookController {
     } catch (error) {
       console.error('Erro ao salvar Phone Number ID da Meta:', error);
       return res.status(500).json({ error: 'Não foi possível salvar o Phone Number ID.' });
-    }
-  }
-
-  async simularFluxo(req: Request, res: Response) {
-    try {
-      if (!this.service.simularFluxoRealista) {
-        return res.status(501).json({ error: 'Simulador não disponível.' });
-      }
-      const cenario = req.body?.cenario === 'RCV_BANCARIO' ? 'RCV_BANCARIO' : 'ECOMMERCE_ML';
-      const resultado = await this.service.simularFluxoRealista(cenario);
-      return res.status(200).json({
-        success: true,
-        cenario,
-        ...resultado
-      });
-    } catch (error) {
-      console.error('Erro ao simular fluxo realista WhatsApp:', error);
-      return res.status(500).json({ error: 'Erro ao simular mensagens no pipeline do WhatsApp.' });
     }
   }
 }

@@ -629,7 +629,12 @@ export class WhatsAppWebhookService {
     payload: JsonRecord,
     encryptionKey: Buffer
   ): { messages: IncomingMessage[]; phoneNumberId?: string } {
-    const entries = Array.isArray(payload.entry) ? payload.entry : [];
+    // Suporta tanto o envelope WABA completo (entry[].changes[]) quanto o formato direto do botão "Teste" do painel da Meta (field + value na raiz)
+    const entries = Array.isArray(payload.entry)
+      ? payload.entry
+      : isRecord(payload.value)
+      ? [{ changes: [{ field: payload.field ?? 'messages', value: payload.value }] }]
+      : [];
     const result: IncomingMessage[] = [];
     let detectedPhoneNumberId: string | undefined;
 
@@ -1011,11 +1016,18 @@ export class WhatsAppWebhookService {
       [escritorioId ?? null]
     );
     const tenant = res.rows[0];
+    const statsRes = await this.pool.query(
+      `SELECT COUNT(*)::int AS total, MAX(recebido_em) AS ultimo_em
+       FROM operacional.webhook_eventos`
+    );
+    const stats = statsRes.rows[0];
     return {
       escritorioId: tenant?.id ?? null,
       escritorioNome: tenant?.nome ?? 'Escritório Piloto',
       whatsappPhoneNumberId: tenant?.whatsapp_phone_number_id ?? '',
-      whatsappDisplayPhone: tenant?.whatsapp_display_phone ?? ''
+      whatsappDisplayPhone: tenant?.whatsapp_display_phone ?? '',
+      totalEventosRecebidos: Number(stats?.total ?? 0),
+      ultimoWebhookEm: stats?.ultimo_em ? new Date(stats.ultimo_em).toISOString() : null
     };
   }
 
@@ -1038,204 +1050,5 @@ export class WhatsAppWebhookService {
     );
 
     return this.obterConfiguracaoTenant(target.escritorioId);
-  }
-
-  /**
-   * Injeta um fluxo realista de conversa fragmentada no WhatsApp (imagens avulsas + texto explicando + áudio transcrito)
-   * usando exatamente o pipeline oficial receberWebhook() para validação imediata pelo Gustavo e André.
-   */
-  async simularFluxoRealista(cenario: 'ECOMMERCE_ML' | 'RCV_BANCARIO' = 'ECOMMERCE_ML') {
-    const nowSec = Math.floor(Date.now() / 1000);
-    const suffix = `${nowSec}`;
-
-    const payload =
-      cenario === 'ECOMMERCE_ML'
-        ? {
-            object: 'whatsapp_business_account',
-            entry: [
-              {
-                id: 'WABA_PILOTO_ANDRE',
-                changes: [
-                  {
-                    field: 'messages',
-                    value: {
-                      messaging_product: 'whatsapp',
-                      metadata: {
-                        display_phone_number: '5541999990000',
-                        phone_number_id: 'META_SANDBOX_PILOTO'
-                      },
-                      contacts: [
-                        {
-                          wa_id: '5541998765432',
-                          profile: { name: 'Marcos Vinícius (Loja TechParts ML)' }
-                        }
-                      ],
-                      messages: [
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.1.${suffix}`,
-                          timestamp: String(nowSec - 240),
-                          type: 'text',
-                          text: {
-                            body: 'Olá Dr. André! Sou vendedor Platinum no Mercado Livre e tomei um golpe de devolução em uma placa de vídeo de R$ 4.890,00.'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.2.${suffix}`,
-                          timestamp: String(nowSec - 190),
-                          type: 'audio',
-                          audio: {
-                            id: `media.audio.ml.${suffix}`,
-                            mime_type: 'audio/ogg; codecs=opus',
-                            transcription:
-                              'Doutor, explicando melhor por áudio: eu enviei a placa RTX 4070 lacrada no dia 14, pesando 1,85kg nos Correios. O comprador abriu reclamação dizendo que recebeu um pacote de sal grosso, e o Mercado Livre devolveu o dinheiro pra ele e debitou os R$ 4.890 da minha conta do Mercado Pago sem analisar o peso!'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.3.${suffix}`,
-                          timestamp: String(nowSec - 140),
-                          type: 'image',
-                          image: {
-                            id: `media.img1.ml.${suffix}`,
-                            mime_type: 'image/jpeg',
-                            filename: 'IMG_20261028_WA0014.jpg'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.4.${suffix}`,
-                          timestamp: String(nowSec - 125),
-                          type: 'text',
-                          text: {
-                            body: 'Essa primeira foto avulsa que mandei aí em cima é o comprovante de postagem dos Correios mostrando o peso exato de 1.850g quando saiu da minha loja.'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.5.${suffix}`,
-                          timestamp: String(nowSec - 90),
-                          type: 'image',
-                          image: {
-                            id: `media.img2.ml.${suffix}`,
-                            mime_type: 'image/jpeg',
-                            filename: 'IMG_20261028_WA0015.jpg'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.6.${suffix}`,
-                          timestamp: String(nowSec - 75),
-                          type: 'text',
-                          text: {
-                            body: 'E essa segunda imagem é o print da mediação encerrada pelo Mercado Livre negando minha cobertura e bloqueando meu saldo no Mercado Pago.'
-                          }
-                        },
-                        {
-                          from: '5541998765432',
-                          id: `wamid.ml.7.${suffix}`,
-                          timestamp: String(nowSec - 30),
-                          type: 'document',
-                          document: {
-                            id: `media.doc1.ml.${suffix}`,
-                            mime_type: 'application/pdf',
-                            filename: 'CNH_Digital_Marcos_Vinicius.pdf',
-                            caption: 'Segue minha CNH Digital em PDF. O comprovante de endereço da Copel mando já!'
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          }
-        : {
-            object: 'whatsapp_business_account',
-            entry: [
-              {
-                id: 'WABA_PILOTO_ANDRE',
-                changes: [
-                  {
-                    field: 'messages',
-                    value: {
-                      messaging_product: 'whatsapp',
-                      metadata: {
-                        display_phone_number: '5541999990000',
-                        phone_number_id: 'META_SANDBOX_PILOTO'
-                      },
-                      contacts: [
-                        {
-                          wa_id: '5541991234567',
-                          profile: { name: 'Carlos Eduardo Rocha (Revisional Veículo)' }
-                        }
-                      ],
-                      messages: [
-                        {
-                          from: '5541991234567',
-                          id: `wamid.rcv.1.${suffix}`,
-                          timestamp: String(nowSec - 300),
-                          type: 'audio',
-                          audio: {
-                            id: `media.audio.rcv.${suffix}`,
-                            mime_type: 'audio/ogg; codecs=opus',
-                            transcription:
-                              'Bom dia Dr. André! Vi seu anúncio sobre revisão de contrato de veículo. Financiei uma Hilux 2022 pelo Banco BV em 60 vezes de R$ 3.420, mas colocaram quase R$ 9.500 de seguro prestamista e tarifa de avaliação sem eu pedir, e agora atrasou duas parcelas.'
-                          }
-                        },
-                        {
-                          from: '5541991234567',
-                          id: `wamid.rcv.2.${suffix}`,
-                          timestamp: String(nowSec - 210),
-                          type: 'document',
-                          document: {
-                            id: `media.doc1.rcv.${suffix}`,
-                            mime_type: 'application/pdf',
-                            filename: 'Contrato_CCB_Banco_BV_Carlos.pdf',
-                            caption: 'Contrato de financiamento (CCB) que baixei no aplicativo do banco'
-                          }
-                        },
-                        {
-                          from: '5541991234567',
-                          id: `wamid.rcv.3.${suffix}`,
-                          timestamp: String(nowSec - 150),
-                          type: 'image',
-                          image: {
-                            id: `media.img1.rcv.${suffix}`,
-                            mime_type: 'image/jpeg',
-                            filename: 'IMG_WA_0092.jpg'
-                          }
-                        },
-                        {
-                          from: '5541991234567',
-                          id: `wamid.rcv.4.${suffix}`,
-                          timestamp: String(nowSec - 135),
-                          type: 'text',
-                          text: {
-                            body: 'Doutor, essa foto avulsa acima é a minha CNH aberta e abaixo já estou mandando a conta de luz da Copel no meu nome.'
-                          }
-                        },
-                        {
-                          from: '5541991234567',
-                          id: `wamid.rcv.5.${suffix}`,
-                          timestamp: String(nowSec - 90),
-                          type: 'document',
-                          document: {
-                            id: `media.doc2.rcv.${suffix}`,
-                            mime_type: 'application/pdf',
-                            filename: 'Fatura_Copel_Comprovante_Endereco.pdf',
-                            caption: 'Comprovante de residência atualizado'
-                          }
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          };
-
-    return this.receberWebhook(Buffer.from(JSON.stringify(payload), 'utf8'));
   }
 }

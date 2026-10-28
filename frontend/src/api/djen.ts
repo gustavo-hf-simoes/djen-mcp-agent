@@ -425,6 +425,8 @@ export interface ConfiguracaoWhatsappTenant {
   verifyToken: string
   hmacAtivo: boolean
   webhookPath: string
+  totalEventosRecebidos?: number
+  ultimoWebhookEm?: string | null
 }
 
 export async function buscarClientesOperacional(): Promise<{ items: ClienteTriagemResumo[] }> {
@@ -462,17 +464,5 @@ export async function salvarConfiguracaoWhatsapp(payload: {
   return apiFetch<ConfiguracaoWhatsappTenant>('/api/v1/operacional/config', {
     method: 'PUT',
     body: payload,
-  })
-}
-
-export async function simularFluxoWhatsapp(cenario: 'ECOMMERCE_ML' | 'RCV_BANCARIO'): Promise<{
-  success: boolean
-  cenario: string
-  mensagens: number
-  duplicado: boolean
-}> {
-  return apiFetch('/api/v1/operacional/simular-fluxo', {
-    method: 'POST',
-    body: { cenario },
   })
 }
