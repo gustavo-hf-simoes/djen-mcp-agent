@@ -27,6 +27,7 @@ import {
   salvarConfiguracaoWhatsapp,
   urlMidiaOperacional,
   baixarZipPastaCliente,
+  urlGerarKitContratual,
   type ClienteTriagemResumo,
   type DossieClienteCompleto,
   type ConfiguracaoWhatsappTenant,
@@ -1023,6 +1024,42 @@ export function OperacionalWhatsappPanel() {
                   >
                     <DownloadSimple size={14} weight="bold" />
                     {downloadingZip ? 'Gerando...' : 'Baixar Pasta (.ZIP)'}
+                  </button>
+                </div>
+
+                {/* AÇÃO JURÍDICA: GERAR KIT CONTRATUAL E PROCURAÇÃO ASO */}
+                <div
+                  className="p-3 rounded-xl flex items-center justify-between gap-3"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(224,159,62,0.12), rgba(224,159,62,0.03))',
+                    border: '1px solid rgba(224,159,62,0.35)',
+                  }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: '#fbbf24' }}>
+                      <FileText size={15} weight="bold" />
+                      Kit Procuração & Contrato (ASO)
+                    </p>
+                    <p className="text-[11px] leading-snug" style={{ color: 'var(--color-ink-muted)' }}>
+                      Gera Procuração Ad Judicia, Declarações e Contrato de Honorários com a marca ASO, pronto para impressão / PDF.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!dossie) return
+                      const url = urlGerarKitContratual(dossie.cliente.id)
+                      window.open(url, '_blank', 'noopener,noreferrer')
+                    }}
+                    className="px-3 py-2 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-sm"
+                    style={{
+                      background: '#e09f3e',
+                      color: '#0f172a',
+                    }}
+                    title="Abre o kit completo em nova aba para visualização, impressão (Ctrl+P) ou salvar como PDF"
+                  >
+                    <ArrowSquareOut size={14} weight="bold" />
+                    Gerar Kit ASO
                   </button>
                 </div>
 

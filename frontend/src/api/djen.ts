@@ -527,3 +527,10 @@ export async function baixarZipPastaCliente(clienteId: string, nomeCliente: stri
   link.remove()
   URL.revokeObjectURL(blobUrl)
 }
+
+export function urlGerarKitContratual(clienteId: string): string {
+  const token = getStoredToken() ?? ''
+  const qs = new URLSearchParams()
+  if (token) qs.set('token', token)
+  return `${BASE_URL}/api/v1/operacional/clientes/${clienteId}/gerar-contrato?${qs.toString()}`
+}

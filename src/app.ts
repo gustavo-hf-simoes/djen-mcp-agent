@@ -30,6 +30,7 @@ export const API_ENDPOINTS = {
   operacionalClienteDossie: '/api/v1/operacional/clientes/:id/dossie',
   operacionalClienteChecklist: '/api/v1/operacional/clientes/:id/checklist',
   operacionalClientePastaZip: '/api/v1/operacional/clientes/:id/pasta-zip',
+  operacionalClienteContrato: '/api/v1/operacional/clientes/:id/gerar-contrato',
   operacionalMidia: '/api/v1/operacional/midia/:id',
   operacionalConfig: '/api/v1/operacional/config',
   politicaPrivacidade: '/politica-de-privacidade',
@@ -118,6 +119,7 @@ export function createApp(
     app.get(API_ENDPOINTS.operacionalClienteDossie, protect, (req, res) => whatsappController.obterDossieCliente(req, res));
     app.patch(API_ENDPOINTS.operacionalClienteChecklist, protect, (req, res) => whatsappController.atualizarChecklistCliente(req, res));
     app.get(API_ENDPOINTS.operacionalClientePastaZip, protect, (req, res) => whatsappController.baixarZipPastaCliente(req, res));
+    app.get(API_ENDPOINTS.operacionalClienteContrato, protect, (req, res) => whatsappController.gerarKitContratual(req, res));
     app.get(API_ENDPOINTS.operacionalMidia, protect, (req, res) => whatsappController.servirArquivoMidia(req, res));
     app.get(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.obterConfiguracao(req, res));
     app.put(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.salvarConfiguracao(req, res));

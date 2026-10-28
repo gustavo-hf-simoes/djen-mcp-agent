@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { Pool } from 'pg';
 import { buildZipBuffer, type ZipEntryInput } from '../djen/application/zip-builder';
 import { decryptValue, encryptValue, phoneHmac } from './whatsapp.crypto';
+import { gerarHtmlKitContratualAso } from './documento-contratual.service';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -1455,6 +1456,39 @@ export class WhatsAppWebhookService {
       zipBuffer: buildZipBuffer(entries),
       zipFilename: `Pasta_Cliente_${safeClientName}.zip`
     };
+  }
+
+  /**
+   * Gera o Kit Contratual Oficial (Procuração + Justiça Gratuita + Declaração de Residência + Contrato de Honorários ASO)
+   * em formato HTML print-ready com a logo oficial ASO ADVOGADOS e o arquiva fisicamente na pasta do cliente.
+   */
+  async gerarKitContratualCliente(
+    clienteId: string,
+    escritorioId?: string
+  ): Promise<{ html: string; filename: string; caminhoFisico: string } | null> {
+    const dossie = await this.obterDossieCliente(clienteId, escritorioId);
+    if (!dossie) return null;
+
+    const clientFolder = join(this.storageRoot, clienteId);
+    if (!existsSync(clientFolder)) {
+      mkdirSync(clientFolder, { recursive: true });
+    }
+
+    const html = gerarHtmlKitContratualAso({
+      nomeCliente: dossie.cliente.nome,
+      telefone: dossie.cliente.telefone,
+      tipoCaso: dossie.cliente.tipoCaso,
+      resumoFatos: dossie.cliente.resumoContexto
+    });
+
+    const safeClientName = dossie.cliente.nome.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Kit_Contratual_ASO_${safeClientName}.html`;
+    const caminhoFisico = join(clientFolder, filename);
+
+    // Grava fisicamente na pasta do cliente para constar no arquivo e no download .ZIP
+    writeFileSync(caminhoFisico, Buffer.from(html, 'utf8'));
+
+    return { html, filename, caminhoFisico };
   }
 
   async atualizarChecklistCliente(

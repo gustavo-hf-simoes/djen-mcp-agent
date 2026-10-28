@@ -213,6 +213,26 @@ export class WhatsAppWebhookController {
     }
   }
 
+  async gerarKitContratual(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id ?? '').trim();
+      if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const doc = await this.service.gerarKitContratualCliente(id, escritorioId);
+      if (!doc) return res.status(404).json({ error: 'Cliente não encontrado para emissão do kit contratual.' });
+
+      if (req.query.format === 'json') {
+        return res.json({ success: true, filename: doc.filename, caminhoFisico: doc.caminhoFisico });
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(doc.html);
+    } catch (error) {
+      console.error('Erro ao gerar kit contratual ASO:', error);
+      return res.status(500).json({ error: 'Falha ao gerar procuração e contrato de honorários.' });
+    }
+  }
+
   async obterConfiguracao(req: Request, res: Response) {
     try {
       const escritorioId = req.authUser?.escritorioId ?? undefined;

@@ -105,3 +105,31 @@ test('POST webhook valida HMAC sobre o corpo bruto antes de processar', async ()
     await closeServer(server);
   }
 });
+
+import { gerarHtmlKitContratualAso } from './documento-contratual.service';
+
+test('gerarHtmlKitContratualAso monta kit documental com procuração, declarações e contrato ASO', () => {
+  const html = gerarHtmlKitContratualAso({
+    nomeCliente: 'Maria da Silva',
+    cpf: '123.456.789-00',
+    rg: '9876543 SSP/PR',
+    endereco: 'Av. Brasil, nº 1000, Centro',
+    cidade: 'Maringá',
+    uf: 'PR',
+    telefone: '(44) 99999-8888',
+    objetoContrato: 'Ação Revisional de Contrato de Empréstimo Bancário'
+  });
+
+  assert.ok(html.includes('PROCURAÇÃO'));
+  assert.ok(html.includes('AD JUDICIA'));
+  assert.ok(html.includes('DECLARAÇÃO DE HIPOSSUFICIÊNCIA'));
+  assert.ok(html.includes('DECLARAÇÃO DE RESIDÊNCIA'));
+  assert.ok(html.includes('CONTRATO DE HONORÁRIOS'));
+  assert.ok(html.includes('MARIA DA SILVA'));
+  assert.ok(html.includes('123.456.789-00'));
+  assert.ok(html.includes('Av. Brasil, nº 1000'));
+  assert.ok(html.includes('ANDRÉ SANTOS DE OLIVEIRA'));
+  assert.ok(html.includes('69.161'));
+  assert.ok(html.includes('Londrina'));
+  assert.ok(html.includes('window.print()'));
+});
