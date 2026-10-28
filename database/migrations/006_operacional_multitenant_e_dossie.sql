@@ -1,7 +1,8 @@
 BEGIN;
 
--- 1. Vínculo do número oficial da Meta (Phone Number ID) ao Escritório (Tenant)
+-- 1. Vínculo do número oficial da Meta (Phone Number ID e WABA ID) ao Escritório (Tenant)
 ALTER TABLE escritorios
+  ADD COLUMN IF NOT EXISTS whatsapp_waba_id VARCHAR(80),
   ADD COLUMN IF NOT EXISTS whatsapp_phone_number_id VARCHAR(80) UNIQUE,
   ADD COLUMN IF NOT EXISTS whatsapp_display_phone VARCHAR(40);
 

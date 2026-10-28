@@ -77,6 +77,7 @@ export function OperacionalWhatsappPanel() {
   // Configuração do Webhook Meta Cloud API (Multi-tenant)
   const [showConfig, setShowConfig] = useState(false)
   const [config, setConfig] = useState<ConfiguracaoWhatsappTenant | null>(null)
+  const [wabaIdInput, setWabaIdInput] = useState('')
   const [phoneIdInput, setPhoneIdInput] = useState('')
   const [displayPhoneInput, setDisplayPhoneInput] = useState('')
   const [savingConfig, setSavingConfig] = useState(false)
@@ -131,6 +132,7 @@ export function OperacionalWhatsappPanel() {
     buscarConfiguracaoWhatsapp()
       .then(cfg => {
         setConfig(cfg)
+        setWabaIdInput(cfg.whatsappWabaId || '')
         setPhoneIdInput(cfg.whatsappPhoneNumberId || '')
         setDisplayPhoneInput(cfg.whatsappDisplayPhone || '')
       })
@@ -197,11 +199,16 @@ export function OperacionalWhatsappPanel() {
     setConfigSavedMsg(null)
     try {
       const atualizado = await salvarConfiguracaoWhatsapp({
+        whatsappWabaId: wabaIdInput,
         whatsappPhoneNumberId: phoneIdInput,
         whatsappDisplayPhone: displayPhoneInput,
       })
       setConfig(atualizado)
-      setConfigSavedMsg('Vínculo salvo! O Webhook já roteia eventos deste Phone Number ID para o escritório.')
+      setConfigSavedMsg(
+        atualizado.metaSubscribed
+          ? 'Vínculo salvo e conta WABA inscrita automaticamente na Graph API da Meta (subscribed_apps OK)!'
+          : 'Vínculo salvo no banco de dados do escritório.'
+      )
     } catch {
       setConfigSavedMsg('Erro ao salvar configuração.')
     } finally {
@@ -494,26 +501,36 @@ export function OperacionalWhatsappPanel() {
               </div>
             </div>
 
-            {/* Passo 3: Vínculo Multi-tenant do Phone Number ID do Escritório */}
+            {/* Passo 3: Vínculo Multi-tenant do Phone Number ID e WABA ID do Escritório */}
             <form
               onSubmit={e => void handleSalvarConfig(e)}
               className="p-4 rounded-xl space-y-3"
               style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
             >
-              <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
-                Passo 3 · Vínculo do Escritório ({config?.escritorioNome ?? 'Escritório Piloto'})
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
+                  Passo 3 · Ativação do Escritório ({config?.escritorioNome ?? 'Escritório Piloto'})
+                </p>
+                {config?.tokenConfiguradoNoServidor && (
+                  <span
+                    className="text-[10px] font-semibold px-2 py-0.5 rounded"
+                    style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
+                  >
+                    Token .env Ativo
+                  </span>
+                )}
+              </div>
 
               <div className="space-y-2">
                 <div className="space-y-1">
                   <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                    Identificação do Número de Telefone (Phone Number ID)
+                    Identificação da Conta de Mensagens (WABA ID)
                   </label>
                   <input
                     type="text"
-                    placeholder="Ex: 1461573947028881"
-                    value={phoneIdInput}
-                    onChange={e => setPhoneIdInput(e.target.value)}
+                    placeholder="Ex: 2346185095786771"
+                    value={wabaIdInput}
+                    onChange={e => setWabaIdInput(e.target.value)}
                     className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
                     style={{
                       background: 'var(--color-surface)',
@@ -523,22 +540,42 @@ export function OperacionalWhatsappPanel() {
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                    Número WhatsApp Vinculado
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 5543996034632"
-                    value={displayPhoneInput}
-                    onChange={e => setDisplayPhoneInput(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
-                    style={{
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-edge)',
-                      color: 'var(--color-ink)',
-                    }}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                      Phone Number ID
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 1461573947028881"
+                      value={phoneIdInput}
+                      onChange={e => setPhoneIdInput(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-edge)',
+                        color: 'var(--color-ink)',
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                      Número WhatsApp
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 5543996034632"
+                      value={displayPhoneInput}
+                      onChange={e => setDisplayPhoneInput(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-edge)',
+                        color: 'var(--color-ink)',
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -552,7 +589,7 @@ export function OperacionalWhatsappPanel() {
                     color: '#09090b',
                   }}
                 >
-                  {savingConfig ? 'Salvando...' : 'Salvar Vínculo'}
+                  {savingConfig ? 'Ativando na Meta...' : 'Salvar & Inscrever na Meta'}
                 </button>
               </div>
 

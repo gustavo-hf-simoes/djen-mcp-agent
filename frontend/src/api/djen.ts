@@ -420,8 +420,11 @@ export interface DossieClienteCompleto {
 export interface ConfiguracaoWhatsappTenant {
   escritorioId: string | null
   escritorioNome: string
+  whatsappWabaId?: string
   whatsappPhoneNumberId: string
   whatsappDisplayPhone: string
+  tokenConfiguradoNoServidor?: boolean
+  metaSubscribed?: boolean
   verifyToken: string
   hmacAtivo: boolean
   webhookPath: string
@@ -458,8 +461,10 @@ export async function buscarConfiguracaoWhatsapp(): Promise<ConfiguracaoWhatsapp
 }
 
 export async function salvarConfiguracaoWhatsapp(payload: {
+  whatsappWabaId?: string
   whatsappPhoneNumberId: string
   whatsappDisplayPhone?: string
+  accessToken?: string
 }): Promise<ConfiguracaoWhatsappTenant> {
   return apiFetch<ConfiguracaoWhatsappTenant>('/api/v1/operacional/config', {
     method: 'PUT',

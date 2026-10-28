@@ -1008,7 +1008,7 @@ export class WhatsAppWebhookService {
 
   async obterConfiguracaoTenant(escritorioId?: string) {
     const res = await this.pool.query(
-      `SELECT id, nome, whatsapp_phone_number_id, whatsapp_display_phone
+      `SELECT id, nome, whatsapp_waba_id, whatsapp_phone_number_id, whatsapp_display_phone
        FROM escritorios
        WHERE ($1::uuid IS NULL OR id = $1)
        ORDER BY created_at ASC
@@ -1024,8 +1024,10 @@ export class WhatsAppWebhookService {
     return {
       escritorioId: tenant?.id ?? null,
       escritorioNome: tenant?.nome ?? 'Escritório Piloto',
+      whatsappWabaId: tenant?.whatsapp_waba_id ?? process.env.WHATSAPP_WABA_ID ?? '',
       whatsappPhoneNumberId: tenant?.whatsapp_phone_number_id ?? '',
       whatsappDisplayPhone: tenant?.whatsapp_display_phone ?? '',
+      tokenConfiguradoNoServidor: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
       totalEventosRecebidos: Number(stats?.total ?? 0),
       ultimoWebhookEm: stats?.ultimo_em ? new Date(stats.ultimo_em).toISOString() : null
     };
@@ -1033,22 +1035,47 @@ export class WhatsAppWebhookService {
 
   async salvarConfiguracaoTenant(
     escritorioId: string | undefined,
-    payload: { whatsappPhoneNumberId: string; whatsappDisplayPhone?: string }
+    payload: {
+      whatsappWabaId?: string;
+      whatsappPhoneNumberId: string;
+      whatsappDisplayPhone?: string;
+      accessToken?: string;
+    }
   ) {
     const target = await this.obterConfiguracaoTenant(escritorioId);
     if (!target.escritorioId) throw new Error('ESCRITORIO_NAO_ENCONTRADO');
 
+    const cleanWabaId = payload.whatsappWabaId?.trim() || target.whatsappWabaId || null;
     const cleanId = payload.whatsappPhoneNumberId.trim() || null;
     const cleanPhone = payload.whatsappDisplayPhone?.trim() || null;
 
     await this.pool.query(
       `UPDATE escritorios
-       SET whatsapp_phone_number_id = $2,
-           whatsapp_display_phone = $3
+       SET whatsapp_waba_id = $2,
+           whatsapp_phone_number_id = $3,
+           whatsapp_display_phone = $4
        WHERE id = $1`,
-      [target.escritorioId, cleanId, cleanPhone]
+      [target.escritorioId, cleanWabaId, cleanId, cleanPhone]
     );
 
-    return this.obterConfiguracaoTenant(target.escritorioId);
+    const tokenToUse = payload.accessToken?.trim() || process.env.WHATSAPP_ACCESS_TOKEN;
+    let metaSubscribed = false;
+    if (cleanWabaId && tokenToUse) {
+      try {
+        const resp = await fetch(`https://graph.facebook.com/v25.0/${cleanWabaId}/subscribed_apps`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenToUse}` }
+        });
+        metaSubscribed = resp.ok;
+      } catch (err) {
+        console.warn('⚠️ Falha ao chamar subscribed_apps na Meta:', err);
+      }
+    }
+
+    const updated = await this.obterConfiguracaoTenant(target.escritorioId);
+    return {
+      ...updated,
+      metaSubscribed
+    };
   }
 }

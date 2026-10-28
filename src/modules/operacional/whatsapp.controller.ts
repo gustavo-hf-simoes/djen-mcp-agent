@@ -24,19 +24,29 @@ export interface WhatsAppWebhookServicePort {
   obterConfiguracaoTenant?(escritorioId?: string): Promise<{
     escritorioId: string | null;
     escritorioNome: string;
+    whatsappWabaId?: string;
     whatsappPhoneNumberId: string;
     whatsappDisplayPhone: string;
+    tokenConfiguradoNoServidor?: boolean;
     totalEventosRecebidos?: number;
     ultimoWebhookEm?: string | null;
   }>;
   salvarConfiguracaoTenant?(
     escritorioId: string | undefined,
-    payload: { whatsappPhoneNumberId: string; whatsappDisplayPhone?: string }
+    payload: {
+      whatsappWabaId?: string;
+      whatsappPhoneNumberId: string;
+      whatsappDisplayPhone?: string;
+      accessToken?: string;
+    }
   ): Promise<{
     escritorioId: string | null;
     escritorioNome: string;
+    whatsappWabaId?: string;
     whatsappPhoneNumberId: string;
     whatsappDisplayPhone: string;
+    tokenConfiguradoNoServidor?: boolean;
+    metaSubscribed?: boolean;
     totalEventosRecebidos?: number;
     ultimoWebhookEm?: string | null;
   }>;
@@ -186,10 +196,12 @@ export class WhatsAppWebhookController {
         return res.status(501).json({ error: 'Salvamento de configuração não suportado.' });
       }
       const escritorioId = req.authUser?.escritorioId ?? undefined;
-      const { whatsappPhoneNumberId, whatsappDisplayPhone } = req.body ?? {};
+      const { whatsappWabaId, whatsappPhoneNumberId, whatsappDisplayPhone, accessToken } = req.body ?? {};
       const salvo = await this.service.salvarConfiguracaoTenant(escritorioId, {
         whatsappPhoneNumberId: String(whatsappPhoneNumberId ?? ''),
-        ...(whatsappDisplayPhone ? { whatsappDisplayPhone: String(whatsappDisplayPhone) } : {})
+        ...(whatsappWabaId ? { whatsappWabaId: String(whatsappWabaId) } : {}),
+        ...(whatsappDisplayPhone ? { whatsappDisplayPhone: String(whatsappDisplayPhone) } : {}),
+        ...(accessToken ? { accessToken: String(accessToken) } : {})
       });
       return res.status(200).json({
         ...salvo,
