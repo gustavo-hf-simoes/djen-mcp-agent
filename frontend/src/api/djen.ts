@@ -4,7 +4,7 @@ import type {
   Tribunal,
 } from '../types/comunicacao'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin)
 const OFICIAL_DJEN_URL = 'https://comunicaapi.pje.jus.br'
 const TOKEN_STORAGE_KEY = 'ghfs_adv_saas_token'
 
@@ -364,4 +364,115 @@ export function periodoUltimosDias(dias: number): { inicio: string; fim: string 
   const inicio = new Date()
   inicio.setDate(inicio.getDate() - dias)
   return { inicio: toISODate(inicio), fim: toISODate(fim) }
+}
+
+// ─── Módulo Operacional · Triagem WhatsApp & Dossiê ───────────────────────────
+
+export type TipoCasoJuridico = 'RCV_BANCARIO' | 'ECOMMERCE_ML' | 'GERAL'
+
+export interface ClienteTriagemResumo {
+  id: string
+  nome: string
+  telefone: string
+  origem: 'LEAD' | 'ANTIGO' | 'NOVO'
+  tipoCaso: TipoCasoJuridico
+  status: 'INCOMPLETO' | 'PRONTO_PROCURACAO' | 'COMPLETO'
+  checklistRecebidos: number
+  checklistTotal: number
+  faltando: string[]
+  resumoContexto: string
+  totalMensagens: number
+  totalDocumentos: number
+  updatedAt: string
+}
+
+export interface MensagemDossie {
+  id: string
+  whatsappMessageId: string
+  direcao: 'ENTRADA' | 'SAIDA'
+  tipo: 'text' | 'audio' | 'image' | 'document' | 'video' | 'sticker' | 'outro'
+  enviadaEm: string
+  texto: string
+  transcricao?: string
+  explicacaoContextual?: string
+  midia?: {
+    id: string
+    tipoDoc: string
+    mediaKind: string
+    mimeType: string | null
+    nomeArquivo: string
+    estado: string
+  }
+}
+
+export interface DossieClienteCompleto {
+  cliente: ClienteTriagemResumo
+  checklist: Array<{
+    key: string
+    label: string
+    obrigatorio: boolean
+    descricao: string
+    recebido: boolean
+  }>
+  mensagens: MensagemDossie[]
+}
+
+export interface ConfiguracaoWhatsappTenant {
+  escritorioId: string | null
+  escritorioNome: string
+  whatsappPhoneNumberId: string
+  whatsappDisplayPhone: string
+  verifyToken: string
+  hmacAtivo: boolean
+  webhookPath: string
+}
+
+export async function buscarClientesOperacional(): Promise<{ items: ClienteTriagemResumo[] }> {
+  return apiFetch<{ items: ClienteTriagemResumo[] }>('/api/v1/operacional/clientes')
+}
+
+export async function buscarDossieCliente(clienteId: string): Promise<DossieClienteCompleto> {
+  return apiFetch<DossieClienteCompleto>(`/api/v1/operacional/clientes/${clienteId}/dossie`)
+}
+
+export async function atualizarChecklistCliente(
+  clienteId: string,
+  payload: {
+    tipoCaso?: TipoCasoJuridico
+    itemKey?: string
+    recebido?: boolean
+    status?: 'INCOMPLETO' | 'PRONTO_PROCURACAO' | 'COMPLETO'
+    resumoContexto?: string
+  },
+): Promise<DossieClienteCompleto> {
+  return apiFetch<DossieClienteCompleto>(`/api/v1/operacional/clientes/${clienteId}/checklist`, {
+    method: 'PATCH',
+    body: payload,
+  })
+}
+
+export async function buscarConfiguracaoWhatsapp(): Promise<ConfiguracaoWhatsappTenant> {
+  return apiFetch<ConfiguracaoWhatsappTenant>('/api/v1/operacional/config')
+}
+
+export async function salvarConfiguracaoWhatsapp(payload: {
+  whatsappPhoneNumberId: string
+  whatsappDisplayPhone?: string
+}): Promise<ConfiguracaoWhatsappTenant> {
+  return apiFetch<ConfiguracaoWhatsappTenant>('/api/v1/operacional/config', {
+    method: 'PUT',
+    body: payload,
+  })
+}
+
+export async function simularFluxoWhatsapp(cenario: 'ECOMMERCE_ML' | 'RCV_BANCARIO'): Promise<{
+  success: boolean
+  cenario: string
+  mensagens: number
+  duplicado: boolean
+}> {
+  return apiFetch('/api/v1/operacional/simular-fluxo', {
+    method: 'POST',
+    body: { cenario },
+  })
 }

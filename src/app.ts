@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { DjenController } from './modules/djen/djen.controller';
 import type { DjenReadController } from './modules/djen/djen-read.controller';
 import type { WhatsAppWebhookController } from './modules/operacional/whatsapp.controller';
@@ -23,6 +25,11 @@ export const API_ENDPOINTS = {
   processoPublicacoes: '/api/v1/processos/:id/publicacoes',
   processoCertidoesZip: '/api/v1/processos/:id/certidoes-zip',
   tribunais: '/api/v1/tribunais',
+  operacionalClientes: '/api/v1/operacional/clientes',
+  operacionalClienteDossie: '/api/v1/operacional/clientes/:id/dossie',
+  operacionalClienteChecklist: '/api/v1/operacional/clientes/:id/checklist',
+  operacionalConfig: '/api/v1/operacional/config',
+  operacionalSimular: '/api/v1/operacional/simular-fluxo',
   whatsappWebhook: '/webhook/whatsapp'
 } as const;
 
@@ -100,6 +107,24 @@ export function createApp(
     app.get(API_ENDPOINTS.processoCertidoesZip, protect, (req, res) => djenReadController.baixarCertidoesDoProcesso(req, res));
     app.get(API_ENDPOINTS.publicacoes, protect, (req, res) => djenReadController.listarPublicacoes(req, res));
     app.get(API_ENDPOINTS.tribunais, protect, (req, res) => djenReadController.listarTribunais(req, res));
+  }
+
+  if (whatsappController) {
+    app.get(API_ENDPOINTS.operacionalClientes, protect, (req, res) => whatsappController.listarClientes(req, res));
+    app.get(API_ENDPOINTS.operacionalClienteDossie, protect, (req, res) => whatsappController.obterDossieCliente(req, res));
+    app.patch(API_ENDPOINTS.operacionalClienteChecklist, protect, (req, res) => whatsappController.atualizarChecklistCliente(req, res));
+    app.get(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.obterConfiguracao(req, res));
+    app.put(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.salvarConfiguracao(req, res));
+    app.post(API_ENDPOINTS.operacionalSimular, protect, (req, res) => whatsappController.simularFluxo(req, res));
+  }
+
+  // Serve o build estático do Frontend (Monorepo unificado para Túnel ou Deploy em Nuvem)
+  const frontendDistPath = join(process.cwd(), 'frontend', 'dist');
+  if (existsSync(frontendDistPath)) {
+    app.use(express.static(frontendDistPath));
+    app.get(/^(?!\/api\/|\/webhook\/|\/api-docs|\/openapi\.json).*/, (_req, res) => {
+      res.sendFile(join(frontendDistPath, 'index.html'));
+    });
   }
 
   return app;

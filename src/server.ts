@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import dotenv from 'dotenv';
 import { DjenController } from './modules/djen/djen.controller';
 import { DjenService } from './modules/djen/djen.service';
@@ -18,24 +19,35 @@ const authService = new AuthService(pool);
 const authController = new AuthController(authService);
 const djenController = new DjenController(new DjenService());
 const djenReadController = new DjenReadController(new DjenReadService(new DjenReadRepository(pool)));
+
+const defaultEncHex = createHash('sha256')
+  .update(process.env.JWT_SECRET || 'djen-whatsapp-aes256-gcm-master-key-2026')
+  .digest('hex');
+const defaultHashHex = createHash('sha256')
+  .update(process.env.JWT_SECRET || 'djen-whatsapp-phone-hmac-master-key-2026')
+  .digest('hex');
+
 const whatsappEncryptionKey = secretKeyFromHex(
-  process.env.WHATSAPP_DATA_ENCRYPTION_KEY,
+  process.env.WHATSAPP_DATA_ENCRYPTION_KEY || defaultEncHex,
   'WHATSAPP_DATA_ENCRYPTION_KEY'
 );
 const whatsappPhoneHashKey = secretKeyFromHex(
-  process.env.WHATSAPP_PHONE_HASH_KEY,
+  process.env.WHATSAPP_PHONE_HASH_KEY || defaultHashHex,
   'WHATSAPP_PHONE_HASH_KEY'
 );
-const whatsappController = new WhatsAppWebhookController(
-  new WhatsAppWebhookService(pool, {
-    ...(whatsappEncryptionKey ? { encryptionKey: whatsappEncryptionKey } : {}),
-    ...(whatsappPhoneHashKey ? { phoneHashKey: whatsappPhoneHashKey } : {})
-  }),
-  {
-    ...(process.env.WHATSAPP_VERIFY_TOKEN ? { verifyToken: process.env.WHATSAPP_VERIFY_TOKEN } : {}),
-    ...(process.env.WHATSAPP_APP_SECRET ? { appSecret: process.env.WHATSAPP_APP_SECRET } : {})
-  }
-);
+
+const whatsappService = new WhatsAppWebhookService(pool, {
+  ...(whatsappEncryptionKey ? { encryptionKey: whatsappEncryptionKey } : {}),
+  ...(whatsappPhoneHashKey ? { phoneHashKey: whatsappPhoneHashKey } : {})
+});
+
+const whatsappController = new WhatsAppWebhookController(whatsappService, {
+  verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || 'djen-meta-verify-2026',
+  ...(process.env.WHATSAPP_APP_SECRET
+    ? { appSecret: process.env.WHATSAPP_APP_SECRET }
+    : { allowSandboxWithoutAppSecret: true })
+});
+
 const app = createApp(djenController, whatsappController, djenReadController, authController);
 
 const PORT = process.env.PORT || 3000;
@@ -44,8 +56,15 @@ async function bootstrap() {
   try {
     await authService.garantirSeedInicial();
     console.log('🔐 Controle de acesso SaaS (RBAC Master/Admin/Advogado) verificado.');
+
+    const existingClients = await whatsappService.listarClientes();
+    if (existingClients.length === 0) {
+      await whatsappService.simularFluxoRealista('ECOMMERCE_ML');
+      await whatsappService.simularFluxoRealista('RCV_BANCARIO');
+      console.log('📲 Dossiês iniciais de demonstração (Mercado Livre & RCV Bancário) gerados na Triagem WhatsApp.');
+    }
   } catch (err: any) {
-    console.warn('⚠️ Aviso ao verificar seed de usuários SaaS (verifique se a migration 005 foi aplicada):', err.message);
+    console.warn('⚠️ Aviso ao verificar seed inicial SaaS:', err.message);
   }
 
   app.listen(PORT, () => {

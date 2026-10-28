@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Warning, Timer, WhatsappLogo, FileText, Microphone, ChartBar, BookOpen, CurrencyDollar } from '@phosphor-icons/react'
+import { Warning, Timer, ChartBar, BookOpen, CurrencyDollar } from '@phosphor-icons/react'
 
 import { Layout } from './components/Layout'
 import type { NavPageId } from './components/Sidebar'
 import { LoginScreen } from './components/LoginScreen'
 import { ControladoriaPanel } from './components/ControladoriaPanel'
 import { ProcessosPanel } from './components/ProcessosPanel'
+import { OperacionalWhatsappPanel } from './components/OperacionalWhatsappPanel'
 import { SaasAdminPanel } from './components/SaasAdminPanel'
 import { FilterPanel, type FilterValues } from './components/FilterPanel'
 import { ResultCard } from './components/ResultCard'
@@ -370,57 +371,9 @@ export function App() {
         <ControladoriaPanel refreshTrigger={refreshTrigger} />
       )}
 
-      {/* PÁGINA 4: OPERACIONAL WHATSAPP */}
+      {/* PÁGINA 4: OPERACIONAL WHATSAPP (Estação 3 Colunas: Fila + Conversa Unificada + Checklist/Dossiê) */}
       {activePage === 'operacional_whatsapp' && (
-        <div
-          className="p-6 rounded-2xl space-y-4"
-          style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
-            >
-              <WhatsappLogo size={22} weight="bold" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
-                Módulo Operacional · Triagem WhatsApp & Pastas de Clientes
-              </h2>
-              <p className="text-xs" style={{ color: 'var(--color-ink-muted)' }}>
-                Coleta inteligente de documentos, transcrição de áudios e geração automática de procuração.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            <div
-              className="p-4 rounded-xl space-y-2"
-              style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
-            >
-              <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
-                <Microphone size={15} style={{ color: 'var(--color-accent)' }} />
-                Transcrição de Áudios & Contexto do Caso
-              </div>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
-                Converte áudios longos de clientes em resumo estruturado dos fatos para alimentar as petições iniciais e recursos.
-              </p>
-            </div>
-
-            <div
-              className="p-4 rounded-xl space-y-2"
-              style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
-            >
-              <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--color-ink)' }}>
-                <FileText size={15} style={{ color: 'var(--color-accent)' }} />
-                Checklist de Documentos (RCV / E-commerce) & ZapSign
-              </div>
-              <p className="text-xs leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
-                Valida documentos enviados no WhatsApp (RG, CNH, Comprovante, Contrato) e gera procuração automática para assinatura digital.
-              </p>
-            </div>
-          </div>
-        </div>
+        <OperacionalWhatsappPanel />
       )}
 
       {/* PÁGINAS DE EXPANSÃO DO ECOSSISTEMA */}
