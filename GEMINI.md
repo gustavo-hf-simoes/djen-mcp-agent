@@ -42,3 +42,9 @@ A usabilidade intuitiva é o maior diferencial comercial do SaaS:
 - Para construir orquestradores, subagentes jurídicos e tools determinísticas, utilize a skill `ai-agent-designer`.
 - **Governança de Custos e Roteamento de Modelos (`model-router`):** Sempre aplique o princípio da economia de créditos: use `flash_lite` para buscas extensas e tarefas operacionais via subagentes, `flash` para construção e refatoração contínua, reservando `pro` / `argon` estritamente para arquitetura profunda ou quando solicitado pelo usuário.
 - **Auditoria de Compliance e LGPD (`legal-compliance-architect`):** Audite toda migration SQL, rota de API ou uso de LLM para garantir que sigilo profissional, privacidade e termos de operador sejam preservados.
+- **Minutas e Peças Jurídicas (`legal-document-drafter`):** Garanta zero alucinação fática, fidelidade estrita às provas da pasta do cliente e supervisão humana obrigatória (status `MINUTA_RASCUNHO`).
+- **Automação Pós-Triagem e Assinatura (`client-intake-flow`):** Governe cobrança cordial de pendências no WhatsApp, links de assinatura eletrônica e o auto-link entre o cliente do WhatsApp e o processo CNJ do DJEN.
+
+## 6. Regras de Engenharia de Prompt Jurídico (Anti-Alucinação & Human-in-the-Loop)
+1. **Fidelidade Fática Absoluta:** O sistema jamais presumirá fatos, valores de dívida ou nomes de testemunhas não declarados nos áudios ou documentos da pasta do cliente.
+2. **Supervisão Humana Prévia (Human-in-the-Loop):** Nenhuma petição inicial, procuração ou mensagem de cobrança processual é enviada ou protocolada de forma autônoma sem a aprovação explícita de 1 clique do advogado titular.
