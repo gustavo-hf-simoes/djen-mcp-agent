@@ -5,6 +5,7 @@ import type { Pool } from 'pg';
 import { buildZipBuffer, type ZipEntryInput } from '../djen/application/zip-builder';
 import { decryptValue, encryptValue, phoneHmac } from './whatsapp.crypto';
 import { gerarHtmlKitContratualAso } from './documento-contratual.service';
+import { extrairDadosDocumento } from './extracao-documental.service';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -242,6 +243,21 @@ interface IncomingMessage {
   phoneNumberId?: string;
 }
 
+
+export interface QualificacaoCadastral {
+  cpf: string | null;
+  rg: string | null;
+  orgaoEmissor: string | null;
+  nacionalidade: string | null;
+  estadoCivil: string | null;
+  profissao: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
+  dadosQualificacao: Record<string, any>;
+}
+
 export interface ClienteTriagemResumo {
   id: string;
   nome: string;
@@ -255,6 +271,7 @@ export interface ClienteTriagemResumo {
   resumoContexto: string;
   totalMensagens: number;
   totalDocumentos: number;
+  qualificacao: QualificacaoCadastral;
   updatedAt: string;
 }
 
@@ -438,7 +455,7 @@ export class WhatsAppWebhookService {
   }
 
   private safeDecryptText(ciphertext?: Buffer | null, nonce?: Buffer | null, tag?: Buffer | null): string | null {
-    if (!ciphertext || !nonce || !tag || !this.secrets.encryptionKey) return null;
+    if (!ciphertext || !nonce || !tag || !this.secrets?.encryptionKey) return null;
     try {
       return decryptValue({ ciphertext, nonce, tag }, this.secrets.encryptionKey).toString('utf8');
     } catch {
@@ -1193,6 +1210,19 @@ export class WhatsAppWebhookService {
       resumoContexto,
       totalMensagens: Number(row.total_mensagens ?? 0),
       totalDocumentos: Number(row.total_documentos ?? 0),
+      qualificacao: {
+        cpf: row.cpf ? String(row.cpf) : null,
+        rg: row.rg ? String(row.rg) : null,
+        orgaoEmissor: row.orgao_emissor ? String(row.orgao_emissor) : null,
+        nacionalidade: row.nacionalidade ? String(row.nacionalidade) : 'brasileiro(a)',
+        estadoCivil: row.estado_civil ? String(row.estado_civil) : 'solteiro(a)',
+        profissao: row.profissao ? String(row.profissao) : null,
+        endereco: row.endereco ? String(row.endereco) : null,
+        cidade: row.cidade ? String(row.cidade) : null,
+        uf: row.uf ? String(row.uf) : null,
+        cep: row.cep ? String(row.cep) : null,
+        dadosQualificacao: isRecord(row.dados_qualificacao) ? (row.dados_qualificacao as Record<string, any>) : {}
+      },
       updatedAt: new Date(row.updated_at).toISOString()
     };
   }
@@ -1207,6 +1237,7 @@ export class WhatsAppWebhookService {
         c.nome_cifrado, c.nome_nonce, c.nome_tag,
         c.origem, c.tipo_caso, c.status, c.checklist_status, c.faltando,
         c.resumo_cifrado, c.resumo_nonce, c.resumo_tag, c.updated_at,
+        c.cpf, c.rg, c.orgao_emissor, c.nacionalidade, c.estado_civil, c.profissao, c.endereco, c.cidade, c.uf, c.cep, c.dados_qualificacao,
         t.telefone_cifrado, t.telefone_nonce, t.telefone_tag,
         (SELECT COUNT(*)::int FROM operacional.mensagens m WHERE m.cliente_id = c.id) AS total_mensagens,
         (SELECT COUNT(*)::int FROM operacional.documentos d WHERE d.cliente_id = c.id) AS total_documentos
@@ -1474,9 +1505,19 @@ export class WhatsAppWebhookService {
       mkdirSync(clientFolder, { recursive: true });
     }
 
+    const q = dossie.cliente.qualificacao;
     const html = gerarHtmlKitContratualAso({
       nomeCliente: dossie.cliente.nome,
       telefone: dossie.cliente.telefone,
+      cpf: q?.cpf ?? undefined,
+      rg: q?.rg ? (q.orgaoEmissor ? `${q.rg} ${q.orgaoEmissor}` : q.rg) : undefined,
+      nacionalidade: q?.nacionalidade ?? undefined,
+      estadoCivil: q?.estadoCivil ?? undefined,
+      profissao: q?.profissao ?? undefined,
+      endereco: q?.endereco ?? undefined,
+      cidade: q?.cidade ?? undefined,
+      uf: q?.uf ?? undefined,
+      cep: q?.cep ?? undefined,
       tipoCaso: dossie.cliente.tipoCaso,
       resumoFatos: dossie.cliente.resumoContexto
     });
@@ -1573,6 +1614,124 @@ export class WhatsAppWebhookService {
         ]
       );
     }
+
+    return this.obterDossieCliente(clienteId, escritorioId);
+  }
+
+  
+  async processarExtracaoDocumentosCliente(clienteId: string, escritorioId?: string): Promise<QualificacaoCadastral | null> {
+    const docsRes = await this.pool.query(
+      `SELECT d.id, d.tipo_doc, d.media_kind, d.mime_type, d.caminho_local
+       FROM operacional.documentos d
+       JOIN operacional.clientes c ON c.id = d.cliente_id
+       WHERE d.cliente_id = $1 AND ($2::uuid IS NULL OR c.escritorio_id = $2)
+         AND d.media_kind IN ('IMAGE', 'DOCUMENT')
+       ORDER BY d.created_at DESC`,
+      [clienteId, escritorioId ?? null]
+    );
+
+    if (docsRes.rows.length === 0) return null;
+
+    let dadosConsolidados: Record<string, any> = {};
+    let cpfEncontrado: string | null = null;
+    let rgEncontrado: string | null = null;
+    let orgaoEmissorEncontrado: string | null = null;
+    let cidadeEncontrada: string | null = null;
+    let ufEncontrada: string | null = null;
+    let enderecoEncontrado: string | null = null;
+    let cepEncontrado: string | null = null;
+    let docIdDetectado = false;
+
+    for (const doc of docsRes.rows) {
+      if (!doc.caminho_local || !existsSync(doc.caminho_local)) continue;
+      const extraido = await extrairDadosDocumento(doc.caminho_local, doc.mime_type);
+      if (!extraido) continue;
+
+      dadosConsolidados = { ...dadosConsolidados, ...extraido };
+      if (extraido.cpf && !cpfEncontrado) cpfEncontrado = extraido.cpf;
+      if (extraido.rg && !rgEncontrado) rgEncontrado = extraido.rg;
+      if (extraido.orgaoEmissor && !orgaoEmissorEncontrado) orgaoEmissorEncontrado = extraido.orgaoEmissor;
+      if (extraido.cidade && !cidadeEncontrada) cidadeEncontrada = extraido.cidade;
+      if (extraido.uf && !ufEncontrada) ufEncontrada = extraido.uf;
+      if (extraido.endereco && !enderecoEncontrado) enderecoEncontrado = extraido.endereco;
+      if (extraido.cep && !cepEncontrado) cepEncontrado = extraido.cep;
+
+      if (extraido.tipoDocumentoDetectado === 'CNH' || extraido.tipoDocumentoDetectado === 'RG') {
+        docIdDetectado = true;
+      }
+    }
+
+    if (Object.keys(dadosConsolidados).length > 0) {
+      await this.pool.query(
+        `UPDATE operacional.clientes
+         SET cpf = COALESCE(cpf, $2),
+             rg = COALESCE(rg, $3),
+             orgao_emissor = COALESCE(orgao_emissor, $4),
+             cidade = COALESCE(cidade, $5),
+             uf = COALESCE(uf, $6),
+             endereco = COALESCE(endereco, $7),
+             cep = COALESCE(cep, $8),
+             dados_qualificacao = dados_qualificacao || $9::jsonb,
+             checklist_status = CASE
+               WHEN $10::boolean AND (checklist_status->>'DOC_IDENTIDADE') IS NULL
+               THEN jsonb_set(checklist_status, '{DOC_IDENTIDADE}', 'true'::jsonb, true)
+               ELSE checklist_status
+             END,
+             updated_at = clock_timestamp()
+         WHERE id = $1`,
+        [
+          clienteId,
+          cpfEncontrado,
+          rgEncontrado,
+          orgaoEmissorEncontrado,
+          cidadeEncontrada,
+          ufEncontrada,
+          enderecoEncontrado,
+          cepEncontrado,
+          JSON.stringify(dadosConsolidados),
+          docIdDetectado
+        ]
+      );
+    }
+
+    const dossie = await this.obterDossieCliente(clienteId, escritorioId);
+    return dossie?.cliente.qualificacao ?? null;
+  }
+
+  async atualizarQualificacaoCliente(
+    clienteId: string,
+    dados: Partial<QualificacaoCadastral>,
+    escritorioId?: string
+  ): Promise<DossieClienteCompleto | null> {
+    await this.pool.query(
+      `UPDATE operacional.clientes
+       SET cpf = COALESCE($2, cpf),
+           rg = COALESCE($3, rg),
+           orgao_emissor = COALESCE($4, orgao_emissor),
+           nacionalidade = COALESCE($5, nacionalidade),
+           estado_civil = COALESCE($6, estado_civil),
+           profissao = COALESCE($7, profissao),
+           endereco = COALESCE($8, endereco),
+           cidade = COALESCE($9, cidade),
+           uf = COALESCE($10, uf),
+           cep = COALESCE($11, cep),
+           updated_at = clock_timestamp()
+       WHERE id = $1 AND ($12::uuid IS NULL OR escritorio_id = $12 OR escritorio_id IS NULL)`,
+      [
+        clienteId,
+        dados.cpf ?? null,
+        dados.rg ?? null,
+        dados.orgaoEmissor ?? null,
+        dados.nacionalidade ?? null,
+        dados.estadoCivil ?? null,
+        dados.profissao ?? null,
+        dados.endereco ?? null,
+        dados.cidade ?? null,
+        dados.uf ?? null,
+        dados.cep ?? null,
+        escritorioId ?? null
+      ]
+    );
 
     return this.obterDossieCliente(clienteId, escritorioId);
   }

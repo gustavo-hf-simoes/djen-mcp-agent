@@ -393,6 +393,20 @@ export type TipoCasoJuridico =
   | 'PENAL'
   | 'GERAL'
 
+export interface QualificacaoCadastral {
+  cpf: string | null
+  rg: string | null
+  orgaoEmissor: string | null
+  nacionalidade: string | null
+  estadoCivil: string | null
+  profissao: string | null
+  endereco: string | null
+  cidade: string | null
+  uf: string | null
+  cep: string | null
+  dadosQualificacao?: Record<string, any>
+}
+
 export interface ClienteTriagemResumo {
   id: string
   nome: string
@@ -406,6 +420,7 @@ export interface ClienteTriagemResumo {
   resumoContexto: string
   totalMensagens: number
   totalDocumentos: number
+  qualificacao?: QualificacaoCadastral
   updatedAt: string
 }
 
@@ -533,4 +548,20 @@ export function urlGerarKitContratual(clienteId: string): string {
   const qs = new URLSearchParams()
   if (token) qs.set('token', token)
   return `${BASE_URL}/api/v1/operacional/clientes/${clienteId}/gerar-contrato?${qs.toString()}`
+}
+
+export async function extrairDocumentosCliente(clienteId: string): Promise<{ success: boolean; qualificacao: QualificacaoCadastral }> {
+  return apiFetch<{ success: boolean; qualificacao: QualificacaoCadastral }>(`/api/v1/operacional/clientes/${clienteId}/extrair-documentos`, {
+    method: 'POST',
+  })
+}
+
+export async function atualizarQualificacaoCliente(
+  clienteId: string,
+  payload: Partial<QualificacaoCadastral>,
+): Promise<DossieClienteCompleto> {
+  return apiFetch<DossieClienteCompleto>(`/api/v1/operacional/clientes/${clienteId}/qualificacao`, {
+    method: 'PATCH',
+    body: payload,
+  })
 }

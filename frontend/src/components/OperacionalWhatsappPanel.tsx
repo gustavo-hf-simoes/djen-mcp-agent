@@ -28,6 +28,8 @@ import {
   urlMidiaOperacional,
   baixarZipPastaCliente,
   urlGerarKitContratual,
+  extrairDocumentosCliente,
+  atualizarQualificacaoCliente,
   type ClienteTriagemResumo,
   type DossieClienteCompleto,
   type ConfiguracaoWhatsappTenant,
@@ -105,6 +107,16 @@ export function OperacionalWhatsappPanel() {
   const [loadingDossie, setLoadingDossie] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [downloadingZip, setDownloadingZip] = useState(false)
+  const [extractingOcr, setExtractingOcr] = useState(false)
+  const [savingQualificacao, setSavingQualificacao] = useState(false)
+  const [editQualificacao, setEditQualificacao] = useState(false)
+  const [qualificacaoMsg, setQualificacaoMsg] = useState<string | null>(null)
+  const [cpfInput, setCpfInput] = useState('')
+  const [rgInput, setRgInput] = useState('')
+  const [estadoCivilInput, setEstadoCivilInput] = useState('solteiro(a)')
+  const [enderecoInput, setEnderecoInput] = useState('')
+  const [cidadeInput, setCidadeInput] = useState('')
+  const [ufInput, setUfInput] = useState('')
 
   // Configuração do Webhook Meta Cloud API (Multi-tenant)
   const [showConfig, setShowConfig] = useState(false)
@@ -198,6 +210,19 @@ export function OperacionalWhatsappPanel() {
     }
   }
 
+
+  useEffect(() => {
+    if (dossie?.cliente.qualificacao) {
+      const q = dossie.cliente.qualificacao
+      setCpfInput(q.cpf ?? '')
+      setRgInput(q.rg ? (q.orgaoEmissor ? `${q.rg} ${q.orgaoEmissor}` : q.rg) : '')
+      setEstadoCivilInput(q.estadoCivil ?? 'solteiro(a)')
+      setEnderecoInput(q.endereco ?? '')
+      setCidadeInput(q.cidade ?? '')
+      setUfInput(q.uf ?? '')
+    }
+  }, [dossie?.cliente.id, dossie?.cliente.qualificacao])
+
   async function handleDownloadPastaZip() {
     if (!dossie) return
     setDownloadingZip(true)
@@ -207,6 +232,55 @@ export function OperacionalWhatsappPanel() {
       console.error('Erro ao baixar pacote ZIP da pasta do cliente:', err)
     } finally {
       setDownloadingZip(false)
+    }
+  }
+
+
+  async function handleDispararOcr() {
+    if (!dossie) return
+    setExtractingOcr(true)
+    setQualificacaoMsg(null)
+    try {
+      const res = await extrairDocumentosCliente(dossie.cliente.id)
+      if (res.qualificacao) {
+        setCpfInput(res.qualificacao.cpf ?? '')
+        setRgInput(res.qualificacao.rg ? (res.qualificacao.orgaoEmissor ? `${res.qualificacao.rg} ${res.qualificacao.orgaoEmissor}` : res.qualificacao.rg) : '')
+        if (res.qualificacao.cidade) setCidadeInput(res.qualificacao.cidade)
+        if (res.qualificacao.uf) setUfInput(res.qualificacao.uf)
+        setQualificacaoMsg('Dados extraídos da CNH com sucesso!')
+        setTimeout(() => setQualificacaoMsg(null), 3500)
+        const rec = await buscarDossieCliente(dossie.cliente.id)
+        setDossie(rec)
+      }
+    } catch (err) {
+      console.error('Erro ao disparar OCR:', err)
+      setQualificacaoMsg('Falha ao processar OCR.')
+    } finally {
+      setExtractingOcr(false)
+    }
+  }
+
+  async function handleSalvarQualificacao() {
+    if (!dossie) return
+    setSavingQualificacao(true)
+    try {
+      const atualizado = await atualizarQualificacaoCliente(dossie.cliente.id, {
+        cpf: cpfInput.trim() || null,
+        rg: rgInput.trim() || null,
+        estadoCivil: estadoCivilInput,
+        endereco: enderecoInput.trim() || null,
+        cidade: cidadeInput.trim() || null,
+        uf: ufInput.trim() || null,
+      })
+      setDossie(atualizado)
+      setEditQualificacao(false)
+      setQualificacaoMsg('Qualificação atualizada com sucesso!')
+      setTimeout(() => setQualificacaoMsg(null), 3000)
+    } catch (err) {
+      console.error('Erro ao salvar qualificação:', err)
+      setQualificacaoMsg('Erro ao salvar dados.')
+    } finally {
+      setSavingQualificacao(false)
     }
   }
 
@@ -1025,6 +1099,188 @@ export function OperacionalWhatsappPanel() {
                     <DownloadSimple size={14} weight="bold" />
                     {downloadingZip ? 'Gerando...' : 'Baixar Pasta (.ZIP)'}
                   </button>
+                </div>
+
+                
+                {/* DADOS DE QUALIFICAÇÃO EXTRAÍDOS POR OCR (CNH/RG) */}
+                <div
+                  className="p-3 rounded-xl space-y-2.5"
+                  style={{
+                    background: 'var(--color-surface-overlay)',
+                    border: '1px solid var(--color-edge-subtle)',
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkle size={14} weight="fill" style={{ color: 'var(--color-accent)' }} />
+                      <span className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
+                        Qualificação Civil (OCR / CNH)
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={extractingOcr}
+                        onClick={() => void handleDispararOcr()}
+                        className="text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer transition-colors"
+                        style={{
+                          background: 'rgba(224,159,62,0.12)',
+                          color: 'var(--color-accent)',
+                          border: '1px solid rgba(224,159,62,0.30)',
+                        }}
+                        title="Re-executa a análise de IA nos documentos da pasta"
+                      >
+                        {extractingOcr ? 'Lendo CNH...' : 'Extrair da CNH'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditQualificacao(!editQualificacao)}
+                        className="text-[11px] font-medium cursor-pointer"
+                        style={{ color: 'var(--color-ink-muted)' }}
+                      >
+                        {editQualificacao ? 'Fechar' : 'Editar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {qualificacaoMsg && (
+                    <p className="text-[11px] font-medium text-emerald-400">
+                      {qualificacaoMsg}
+                    </p>
+                  )}
+
+                  {!editQualificacao ? (
+                    <div className="text-[11px] space-y-1" style={{ color: 'var(--color-ink-muted)' }}>
+                      <p>
+                        <strong style={{ color: 'var(--color-ink)' }}>CPF:</strong>{' '}
+                        {cpfInput ? (
+                          <span className="font-mono text-emerald-400 font-bold">{cpfInput}</span>
+                        ) : (
+                          <span className="text-amber-400">Pendente de leitura</span>
+                        )}
+                        {' · '}
+                        <strong style={{ color: 'var(--color-ink)' }}>RG:</strong>{' '}
+                        {rgInput ? (
+                          <span className="font-mono" style={{ color: 'var(--color-ink)' }}>{rgInput}</span>
+                        ) : (
+                          <span className="text-zinc-500">Pendente</span>
+                        )}
+                      </p>
+                      <p>
+                        <strong style={{ color: 'var(--color-ink)' }}>Estado Civil:</strong>{' '}
+                        <span className="capitalize" style={{ color: 'var(--color-ink)' }}>{estadoCivilInput}</span>
+                        {' · '}
+                        <strong style={{ color: 'var(--color-ink)' }}>Cidade/UF:</strong>{' '}
+                        <span style={{ color: 'var(--color-ink)' }}>{cidadeInput || 'Londrina'}/{ufInput || 'PR'}</span>
+                      </p>
+                      {enderecoInput && (
+                        <p className="truncate">
+                          <strong style={{ color: 'var(--color-ink)' }}>Endereço:</strong> {enderecoInput}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                            CPF do Cliente
+                          </label>
+                          <input
+                            type="text"
+                            value={cpfInput}
+                            onChange={e => setCpfInput(e.target.value)}
+                            placeholder="000.000.000-00"
+                            className="w-full px-2 py-1 rounded text-xs font-mono"
+                            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                            RG / Órgão Emissor
+                          </label>
+                          <input
+                            type="text"
+                            value={rgInput}
+                            onChange={e => setRgInput(e.target.value)}
+                            placeholder="Ex: 12345678-9 SESP/PR"
+                            className="w-full px-2 py-1 rounded text-xs font-mono"
+                            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                            Estado Civil
+                          </label>
+                          <select
+                            value={estadoCivilInput}
+                            onChange={e => setEstadoCivilInput(e.target.value)}
+                            className="w-full px-2 py-1 rounded text-xs cursor-pointer"
+                            style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                          >
+                            <option value="solteiro(a)">Solteiro(a)</option>
+                            <option value="casado(a)">Casado(a)</option>
+                            <option value="divorciado(a)">Divorciado(a)</option>
+                            <option value="viúvo(a)">Viúvo(a)</option>
+                            <option value="em união estável">União Estável</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                            Cidade / UF
+                          </label>
+                          <div className="flex gap-1">
+                            <input
+                              type="text"
+                              value={cidadeInput}
+                              onChange={e => setCidadeInput(e.target.value)}
+                              placeholder="Cidade"
+                              className="w-full px-2 py-1 rounded text-xs"
+                              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                            />
+                            <input
+                              type="text"
+                              value={ufInput}
+                              maxLength={2}
+                              onChange={e => setUfInput(e.target.value.toUpperCase())}
+                              placeholder="UF"
+                              className="w-12 px-2 py-1 rounded text-xs text-center font-mono"
+                              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
+                          Endereço Residencial Completo
+                        </label>
+                        <input
+                          type="text"
+                          value={enderecoInput}
+                          onChange={e => setEnderecoInput(e.target.value)}
+                          placeholder="Rua, número, complemento, bairro"
+                          className="w-full px-2 py-1 rounded text-xs"
+                          style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                        />
+                      </div>
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          disabled={savingQualificacao}
+                          onClick={() => void handleSalvarQualificacao()}
+                          className="px-2.5 py-1 rounded text-xs font-bold cursor-pointer"
+                          style={{ background: 'var(--color-accent)', color: '#09090b' }}
+                        >
+                          {savingQualificacao ? 'Salvando...' : 'Salvar Qualificação'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* AÇÃO JURÍDICA: GERAR KIT CONTRATUAL E PROCURAÇÃO ASO */}

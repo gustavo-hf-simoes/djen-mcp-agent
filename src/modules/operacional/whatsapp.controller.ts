@@ -213,6 +213,34 @@ export class WhatsAppWebhookController {
     }
   }
 
+  
+  async extrairDocumentosCliente(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id ?? '').trim();
+      if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const qualificacao = await this.service.processarExtracaoDocumentosCliente(id, escritorioId);
+      return res.json({ success: true, qualificacao });
+    } catch (error) {
+      console.error('Erro ao extrair dados de documentos do cliente:', error);
+      return res.status(500).json({ error: 'Falha no processamento de OCR/IA dos documentos.' });
+    }
+  }
+
+  async atualizarQualificacaoCliente(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id ?? '').trim();
+      if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const dossieAtualizado = await this.service.atualizarQualificacaoCliente(id, req.body ?? {}, escritorioId);
+      if (!dossieAtualizado) return res.status(404).json({ error: 'Cliente não encontrado.' });
+      return res.json(dossieAtualizado);
+    } catch (error) {
+      console.error('Erro ao atualizar qualificação do cliente:', error);
+      return res.status(500).json({ error: 'Erro ao atualizar dados de qualificação.' });
+    }
+  }
+
   async gerarKitContratual(req: Request, res: Response) {
     try {
       const id = String(req.params.id ?? '').trim();
