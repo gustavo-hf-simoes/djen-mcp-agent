@@ -35,7 +35,8 @@ A usabilidade intuitiva é o maior diferencial comercial do SaaS:
    - Painéis de filtro laterais devem ter scroll independente (`overscroll-contain`) sem arrastar a página principal.
    - Manter fidelidade absoluta à paleta escura e badges semânticos criados pelo Alessandro (`Chumbo + Âmbar`).
 
-## 5. Fluxo de Desenvolvimento Agêntico (Spec-Driven)
+## 5. Fluxo de Desenvolvimento Agêntico (Spec-Driven & Token-Aware)
 - Antes de escrever código complexo, utilize a skill `spec-architect` para transformar ideias brutas (áudios do Gustavo ou documentos do André) em especificações técnicas executáveis (`docs/specs/`).
 - Para implementar banco, backend e frontend ponta a ponta, utilize a skill `fullstack-builder`.
 - Para construir orquestradores, subagentes jurídicos e tools determinísticas, utilize a skill `ai-agent-designer`.
+- **Governança de Custos e Roteamento de Modelos (`model-router`):** Sempre aplique o princípio da economia de créditos: use `flash_lite` para buscas extensas e tarefas operacionais via subagentes, `flash` para construção e refatoração contínua, reservando `pro` / `argon` estritamente para arquitetura profunda ou quando solicitado pelo usuário.
