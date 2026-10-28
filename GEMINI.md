@@ -20,10 +20,11 @@ Este produto opera em formato **Monorepo** para contexto atômico dos agentes:
   - `MASTER` (**Gustavo**): Controle total do SaaS, gestão de todos os escritórios (tenants), usuários, chaves e auditoria. Nenhum outro papel pode alterar ou remover um usuário `MASTER`.
   - `ADMIN_DEV` (**Alessandro**): Acesso administrativo de suporte/desenvolvimento ao ambiente, subordinado ao `MASTER`.
   - `ADVOGADO` (**André — `OAB 69161/PR`**): Usuário piloto ("Laboratório Vivo"), advogado solo (sem equipe humana) operando nos nichos de Direito Bancário (RCV) e E-commerce (Mercado Livre).
-- **Regras Estritas de Segurança (Zero-Trust & OWASP):**
+- **Regras Estritas de Segurança & LGPD (Zero-Trust & OWASP & Lei 13.709/2018):**
   1. **Nenhuma rota de dados jurídicos pode ser pública:** Todo endpoint de `/api/v1/*` e `/api/djen/*` exige token autenticado (`Bearer` HMAC-SHA256) e verificação de `tenant_id` (`escritorio_id`).
   2. **Senhas e Tokens:** Senhas devem usar `crypto.scrypt` com salt aleatório e comparação em tempo constante (`timingSafeEqual`).
   3. **Isolamento Multi-tenant:** Um usuário `ADVOGADO` jamais pode consultar ou modificar processos/intimações de outro `escritorio_id` / `advogado_id`.
+  4. **Conformidade LGPD & OAB (Skill `legal-compliance-architect`):** Toda feature atua estritamente como **Operador de Dados (LGPD Art. 5º)**. Dados pessoais, áudios e documentos devem ser armazenados com criptografia autenticada (`AES-256-GCM`), blind index para telefones e hashes probatórios de cadeia de custódia.
 
 ## 4. Diretrizes Obrigatórias de Usabilidade (UX Jurídica & Padrão de Mercado)
 A usabilidade intuitiva é o maior diferencial comercial do SaaS:
@@ -40,3 +41,4 @@ A usabilidade intuitiva é o maior diferencial comercial do SaaS:
 - Para implementar banco, backend e frontend ponta a ponta, utilize a skill `fullstack-builder`.
 - Para construir orquestradores, subagentes jurídicos e tools determinísticas, utilize a skill `ai-agent-designer`.
 - **Governança de Custos e Roteamento de Modelos (`model-router`):** Sempre aplique o princípio da economia de créditos: use `flash_lite` para buscas extensas e tarefas operacionais via subagentes, `flash` para construção e refatoração contínua, reservando `pro` / `argon` estritamente para arquitetura profunda ou quando solicitado pelo usuário.
+- **Auditoria de Compliance e LGPD (`legal-compliance-architect`):** Audite toda migration SQL, rota de API ou uso de LLM para garantir que sigilo profissional, privacidade e termos de operador sejam preservados.
