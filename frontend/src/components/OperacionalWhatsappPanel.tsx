@@ -30,6 +30,7 @@ import {
   urlGerarKitContratual,
   extrairDocumentosCliente,
   atualizarQualificacaoCliente,
+  reprocessarMidiasCliente,
   type ClienteTriagemResumo,
   type DossieClienteCompleto,
   type ConfiguracaoWhatsappTenant,
@@ -108,6 +109,7 @@ export function OperacionalWhatsappPanel() {
   const [refreshing, setRefreshing] = useState(false)
   const [downloadingZip, setDownloadingZip] = useState(false)
   const [extractingOcr, setExtractingOcr] = useState(false)
+  const [reprocessandoMidias, setReprocessandoMidias] = useState(false)
   const [savingQualificacao, setSavingQualificacao] = useState(false)
   const [editQualificacao, setEditQualificacao] = useState(false)
   const [qualificacaoMsg, setQualificacaoMsg] = useState<string | null>(null)
@@ -235,6 +237,20 @@ export function OperacionalWhatsappPanel() {
     }
   }
 
+
+
+  async function handleReprocessarMidias() {
+    if (!dossie) return
+    setReprocessandoMidias(true)
+    try {
+      const atualizado = await reprocessarMidiasCliente(dossie.cliente.id)
+      setDossie(atualizado)
+    } catch (err) {
+      console.error('Erro ao reprocessar mídias:', err)
+    } finally {
+      setReprocessandoMidias(false)
+    }
+  }
 
   async function handleDispararOcr() {
     if (!dossie) return
@@ -978,24 +994,71 @@ export function OperacionalWhatsappPanel() {
                       {/* TRANSCRIÇÃO AUTOMÁTICA DE ÁUDIO */}
                       {isAudio && (
                         <div
-                          className="p-3 rounded-lg space-y-1"
+                          className="p-3 rounded-lg space-y-2"
                           style={{
-                            background: 'rgba(224,159,62,0.08)',
-                            border: '1px solid rgba(224,159,62,0.22)',
+                            background: msg.transcricaoEstado === 'ERRO_TOKEN_META'
+                              ? 'rgba(239, 68, 68, 0.08)'
+                              : 'rgba(224,159,62,0.08)',
+                            border: msg.transcricaoEstado === 'ERRO_TOKEN_META'
+                              ? '1px solid rgba(239, 68, 68, 0.30)'
+                              : '1px solid rgba(224,159,62,0.22)',
                           }}
                         >
-                          <p
-                            className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
-                            style={{ color: 'var(--color-accent)' }}
-                          >
-                            <Sparkle size={12} weight="fill" />
-                            Transcrição Automática em Texto (IA)
-                          </p>
-                          <p className="text-xs leading-relaxed italic" style={{ color: 'var(--color-ink)' }}>
-                            {msg.transcricao
-                              ? `"${msg.transcricao}"`
-                              : 'Processando transcrição automática do áudio...'}
-                          </p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p
+                              className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1"
+                              style={{ color: msg.transcricaoEstado === 'ERRO_TOKEN_META' ? '#f87171' : 'var(--color-accent)' }}
+                            >
+                              <Sparkle size={12} weight="fill" />
+                              {msg.transcricaoEstado === 'ERRO_TOKEN_META'
+                                ? 'Erro: Token WhatsApp Expirado'
+                                : 'Transcrição Automática em Texto (IA)'}
+                            </p>
+                            {!msg.transcricao && (
+                              <button
+                                type="button"
+                                disabled={reprocessandoMidias}
+                                onClick={() => void handleReprocessarMidias()}
+                                className="text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer flex items-center gap-1 transition-opacity"
+                                style={{
+                                  background: 'rgba(224,159,62,0.15)',
+                                  color: 'var(--color-accent)',
+                                }}
+                                title="Solicita o download do áudio e transcrição novamente"
+                              >
+                                <ArrowsClockwise size={11} className={reprocessandoMidias ? 'animate-spin' : ''} />
+                                {reprocessandoMidias ? 'Processando...' : 'Tentar Novamente'}
+                              </button>
+                            )}
+                          </div>
+
+                          {msg.transcricao ? (
+                            <p className="text-xs leading-relaxed italic" style={{ color: 'var(--color-ink)' }}>
+                              "{msg.transcricao}"
+                            </p>
+                          ) : msg.transcricaoEstado === 'ERRO_TOKEN_META' ? (
+                            <div className="space-y-1.5 pt-0.5">
+                              <p className="text-xs text-rose-300 leading-snug">
+                                A Meta bloqueou o download deste áudio porque o <strong>Token temporário de 24h expirou</strong>.
+                              </p>
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConfig(true)}
+                                  className="px-2.5 py-1 rounded text-xs font-bold cursor-pointer"
+                                  style={{ background: '#f87171', color: '#0f172a' }}
+                                >
+                                  Colar Novo Token da Meta
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs leading-relaxed italic" style={{ color: 'var(--color-ink-muted)' }}>
+                                Processando download e transcrição do áudio...
+                              </p>
+                            </div>
+                          )}
                         </div>
                       )}
 

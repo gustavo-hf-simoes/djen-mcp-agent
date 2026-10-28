@@ -731,23 +731,61 @@ export class WhatsAppWebhookService {
           fileBuffer = readFileSync(localPath);
         } else {
           // 1. Consulta URL de download na Graph API da Meta
-          const metaInfoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal: AbortSignal.timeout(15000)
-          });
-          if (!metaInfoRes.ok) continue;
+          let metaInfoRes: Response;
+          try {
+            metaInfoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: AbortSignal.timeout(15000)
+            });
+          } catch (netErr) {
+            console.warn(`[WhatsApp Media] Timeout ou erro de rede ao consultar mediaId ${mediaId}:`, (netErr as Error).message);
+            continue;
+          }
+
+          if (!metaInfoRes.ok) {
+            const errText = await metaInfoRes.text();
+            console.warn(`[WhatsApp Media] Erro da Meta ao consultar mediaId ${mediaId} (${metaInfoRes.status}):`, errText);
+
+            if (metaInfoRes.status === 401 || metaInfoRes.status === 403) {
+              await this.pool.query(
+                `UPDATE operacional.documentos SET estado = 'ERRO', erro_codigo = 'TOKEN_META_EXPIRADO' WHERE id = $1`,
+                [row.doc_id]
+              );
+              if (row.media_kind === 'AUDIO') {
+                await this.pool.query(
+                  `UPDATE operacional.mensagens SET transcricao_estado = 'ERRO_TOKEN_META' WHERE id = $1`,
+                  [row.mensagem_id]
+                );
+              }
+            }
+            continue;
+          }
+
           const metaInfo = (await metaInfoRes.json()) as { url?: string; mime_type?: string };
-          if (!metaInfo.url) continue;
+          if (!metaInfo.url) {
+            console.warn(`[WhatsApp Media] URL não informada pela Meta para mediaId ${mediaId}`);
+            continue;
+          }
           if (metaInfo.mime_type) {
             mimeType = metaInfo.mime_type.split(';')[0]!.trim();
           }
 
           // 2. Baixa os bytes reais do arquivo (áudio, imagem ou PDF)
-          const binRes = await fetch(metaInfo.url, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal: AbortSignal.timeout(20000)
-          });
-          if (!binRes.ok) continue;
+          let binRes: Response;
+          try {
+            binRes = await fetch(metaInfo.url, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+              signal: AbortSignal.timeout(30000)
+            });
+          } catch (netErr) {
+            console.warn(`[WhatsApp Media] Timeout ao baixar bytes de mediaId ${mediaId}:`, (netErr as Error).message);
+            continue;
+          }
+
+          if (!binRes.ok) {
+            console.warn(`[WhatsApp Media] Falha ao baixar bytes da URL da Meta (${binRes.status})`);
+            continue;
+          }
           fileBuffer = Buffer.from(await binRes.arrayBuffer());
 
           const originalName = this.safeDecryptText(
@@ -859,42 +897,58 @@ export class WhatsAppWebhookService {
     const geminiKey = process.env.GEMINI_API_KEY;
     if (!geminiKey) return null;
 
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(20000),
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: 'Transcreva fielmente em português o áudio enviado pelo cliente ao escritório de advocacia. Retorne apenas o texto falado, sem comentários adicionais.'
-                  },
-                  {
-                    inline_data: {
-                      mime_type: mimeType.startsWith('audio/') ? mimeType : 'audio/ogg',
-                      data: audioBuffer.toString('base64')
-                    }
-                  }
-                ]
-              }
-            ]
-          })
-        }
-      );
+    const base64Audio = audioBuffer.toString('base64');
+    const cleanMime = mimeType.startsWith('audio/') ? mimeType : 'audio/ogg';
 
-      if (!response.ok) return null;
-      const data = (await response.json()) as any;
-      const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
-      const text = parts.filter(p => !p?.thought && typeof p?.text === 'string').pop()?.text ?? parts[0]?.text;
-      return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
-    } catch (err) {
-      console.warn('Falha ao transcrever áudio com Gemini:', err);
-      return null;
+    // Roteador de Alta Disponibilidade: cadeia de modelos para garantir >= 99% uptime
+    const modelos = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+
+    for (const modelo of modelos) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: 'Transcreva fielmente em português o áudio enviado pelo cliente ao escritório de advocacia. Retorne apenas o texto falado, sem comentários adicionais.'
+                    },
+                    {
+                      inline_data: {
+                        mime_type: cleanMime,
+                        data: base64Audio
+                      }
+                    }
+                  ]
+                }
+              ]
+            })
+          }
+        );
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.warn(`[Transcrição Audio] Modelo ${modelo} retornou ${response.status}:`, errText);
+          continue;
+        }
+
+        const data = (await response.json()) as any;
+        const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+        const textPart = parts.find(p => !p?.thought && typeof p?.text === 'string') || parts[0];
+        const text = textPart?.text;
+        if (typeof text === 'string' && text.trim().length > 0) {
+          return text.trim();
+        }
+      } catch (err) {
+        console.warn(`[Transcrição Audio] Falha com modelo ${modelo}:`, (err as Error).message);
+      }
     }
+
+    return null;
   }
 
   private async analisarDocumentoOuImagemComIA(

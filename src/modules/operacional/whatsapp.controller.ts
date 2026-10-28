@@ -214,6 +214,21 @@ export class WhatsAppWebhookController {
   }
 
   
+  
+  async reprocessarMidiasCliente(req: Request, res: Response) {
+    try {
+      const id = String(req.params.id ?? '').trim();
+      if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const resultado = await this.service.processarMidiasPendentesCliente(id);
+      const dossie = await this.service.obterDossieCliente(id, escritorioId);
+      return res.json({ success: true, processados: resultado.processados, dossie });
+    } catch (error) {
+      console.error('Erro ao reprocessar mídias do cliente:', error);
+      return res.status(500).json({ error: 'Falha ao reprocessar mídias.' });
+    }
+  }
+
   async extrairDocumentosCliente(req: Request, res: Response) {
     try {
       const id = String(req.params.id ?? '').trim();

@@ -565,3 +565,11 @@ export async function atualizarQualificacaoCliente(
     body: payload,
   })
 }
+
+export async function reprocessarMidiasCliente(clienteId: string): Promise<DossieClienteCompleto> {
+  const res = await apiFetch<{ success: boolean; processados: number; dossie: DossieClienteCompleto }>(
+    `/api/v1/operacional/clientes/${clienteId}/reprocessar-midias`,
+    { method: 'POST' }
+  )
+  return res.dossie
+}

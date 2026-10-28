@@ -32,6 +32,7 @@ export const API_ENDPOINTS = {
   operacionalClientePastaZip: '/api/v1/operacional/clientes/:id/pasta-zip',
   operacionalClienteContrato: '/api/v1/operacional/clientes/:id/gerar-contrato',
   operacionalClienteExtrairDocs: '/api/v1/operacional/clientes/:id/extrair-documentos',
+  operacionalClienteReprocessarMidias: '/api/v1/operacional/clientes/:id/reprocessar-midias',
   operacionalClienteQualificacao: '/api/v1/operacional/clientes/:id/qualificacao',
   operacionalMidia: '/api/v1/operacional/midia/:id',
   operacionalConfig: '/api/v1/operacional/config',
@@ -123,6 +124,7 @@ export function createApp(
     app.get(API_ENDPOINTS.operacionalClientePastaZip, protect, (req, res) => whatsappController.baixarZipPastaCliente(req, res));
     app.get(API_ENDPOINTS.operacionalClienteContrato, protect, (req, res) => whatsappController.gerarKitContratual(req, res));
     app.post(API_ENDPOINTS.operacionalClienteExtrairDocs, protect, (req, res) => whatsappController.extrairDocumentosCliente(req, res));
+    app.post(API_ENDPOINTS.operacionalClienteReprocessarMidias, protect, (req, res) => whatsappController.reprocessarMidiasCliente(req, res));
     app.patch(API_ENDPOINTS.operacionalClienteQualificacao, protect, (req, res) => whatsappController.atualizarQualificacaoCliente(req, res));
     app.get(API_ENDPOINTS.operacionalMidia, protect, (req, res) => whatsappController.servirArquivoMidia(req, res));
     app.get(API_ENDPOINTS.operacionalConfig, protect, (req, res) => whatsappController.obterConfiguracao(req, res));
