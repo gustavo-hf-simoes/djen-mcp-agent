@@ -102,4 +102,35 @@ export class AuthController {
       return res.status(500).json({ error: 'Não foi possível consultar a administração do SaaS.' });
     }
   }
+
+  async atualizarEscritorio(req: Request, res: Response) {
+    try {
+      if (!req.authUser) {
+        return res.status(401).json({ error: 'Sessão não autenticada.' });
+      }
+      if (!this.authService.atualizarEscritorio) {
+        return res.status(501).json({ error: 'Atualização de escritório não habilitada.' });
+      }
+
+      const body = req.body ?? {};
+      const targetEscritorioId =
+        req.authUser.role === 'MASTER' && typeof body.escritorioId === 'string' && body.escritorioId.trim()
+          ? body.escritorioId.trim()
+          : req.authUser.escritorioId;
+
+      if (!targetEscritorioId) {
+        return res.status(400).json({ error: 'Nenhum escritório vinculado para atualização.' });
+      }
+
+      const atualizado = await this.authService.atualizarEscritorio(targetEscritorioId, {
+        ...(typeof body.nome === 'string' ? { nome: body.nome } : {}),
+        ...(body.logoUrl === null || typeof body.logoUrl === 'string' ? { logoUrl: body.logoUrl } : {})
+      });
+
+      return res.json({ escritorio: atualizado });
+    } catch (error) {
+      console.error('Erro ao atualizar identidade do escritório:', error);
+      return res.status(500).json({ error: 'Não foi possível atualizar a identidade do escritório.' });
+    }
+  }
 }

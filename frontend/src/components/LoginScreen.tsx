@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Scales, LockKey, EnvelopeSimple } from '@phosphor-icons/react'
+import { LockKey, EnvelopeSimple } from '@phosphor-icons/react'
 import { loginSaas, DjenError, type UsuarioSessao } from '../api/djen'
+import { DEFAULT_ASO_LOGO_DATA_URL } from './Sidebar'
 
 interface LoginScreenProps {
   onSuccess: (usuario: UsuarioSessao) => void
@@ -52,17 +53,17 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}
         >
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: 'var(--color-accent)' }}
+            className="w-14 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+            style={{ background: '#211E4A', border: '1px solid var(--color-edge)' }}
           >
-            <Scales size={20} weight="bold" style={{ color: 'var(--color-accent-on)' }} />
+            <img src={DEFAULT_ASO_LOGO_DATA_URL} alt="ASO Advogados" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight" style={{ color: 'var(--color-ink)' }}>
-              GHFS Jurídico
+              ASO Advogados
             </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-faint)' }}>
-              Acesse sua conta para continuar
+              Controladoria & Triagem Inteligente · Acesse sua conta
             </p>
           </div>
         </div>

@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import {
-  Scales,
   SignOut,
   ArrowsClockwise,
   ShieldCheck,
@@ -11,9 +10,25 @@ import {
   BookOpen,
   ChartBar,
   CurrencyDollar,
+  PencilSimple,
+  UploadSimple,
+  Check,
   X,
 } from '@phosphor-icons/react'
-import type { UsuarioSessao } from '../api/djen'
+import { atualizarIdentidadeEscritorio, type UsuarioSessao } from '../api/djen'
+
+export const DEFAULT_ASO_LOGO_DATA_URL =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 160">
+      <rect width="240" height="160" rx="20" fill="#211E4A"/>
+      <rect x="22" y="22" width="120" height="84" fill="#FFFFFF"/>
+      <rect x="142" y="22" width="76" height="84" fill="#FF1E1E"/>
+      <text x="82" y="86" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="68" font-weight="500" fill="#211E4A" letter-spacing="2">AS</text>
+      <text x="180" y="86" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="68" font-weight="500" fill="#211E4A">O</text>
+      <text x="120" y="136" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="18.5" font-weight="600" fill="#FFFFFF" letter-spacing="7.5">ADVOGADOS</text>
+    </svg>`
+  )
 
 export type NavPageId =
   | 'djen_publicacoes'
@@ -127,6 +142,7 @@ interface SidebarProps {
   onSyncNow: () => void
   syncing: boolean
   onLogout: () => void
+  onUpdateUsuario?: (usuario: UsuarioSessao) => void
 }
 
 export function Sidebar({
@@ -136,10 +152,64 @@ export function Sidebar({
   onSyncNow,
   syncing,
   onLogout,
+  onUpdateUsuario,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [editingBrand, setEditingBrand] = useState(false)
+  const [officeName, setOfficeName] = useState(usuario.escritorio.nome || 'ASO Advogados')
+  const [officeLogo, setOfficeLogo] = useState<string>(usuario.escritorio.logoUrl || DEFAULT_ASO_LOGO_DATA_URL)
+  const [savingBrand, setSavingBrand] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   const isMaster = usuario.role === 'MASTER'
   const roleInfo = ROLE_BADGE[usuario.role] ?? { label: usuario.role, color: '#a1a1aa' }
+
+  const displayOfficeName = usuario.escritorio.nome || 'ASO Advogados'
+  const displayOfficeLogo = usuario.escritorio.logoUrl || DEFAULT_ASO_LOGO_DATA_URL
+
+  function handleOpenEditBrand() {
+    setOfficeName(displayOfficeName)
+    setOfficeLogo(displayOfficeLogo)
+    setEditingBrand(true)
+  }
+
+  function handleLogoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setOfficeLogo(reader.result)
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function handleSaveBrand(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingBrand(true)
+    try {
+      const res = await atualizarIdentidadeEscritorio({
+        nome: officeName.trim() || 'ASO Advogados',
+        logoUrl: officeLogo || DEFAULT_ASO_LOGO_DATA_URL,
+      })
+      if (onUpdateUsuario) {
+        onUpdateUsuario({
+          ...usuario,
+          escritorio: {
+            ...usuario.escritorio,
+            nome: res.escritorio.nome,
+            logoUrl: res.escritorio.logoUrl,
+          },
+        })
+      }
+      setEditingBrand(false)
+    } catch (err) {
+      console.error('Erro ao salvar identidade do escritório:', err)
+    } finally {
+      setSavingBrand(false)
+    }
+  }
 
   const filteredGroups = useMemo(() => {
     const q = searchQuery
@@ -171,20 +241,43 @@ export function Sidebar({
       }}
     >
       <div className="p-4 space-y-4">
-        {/* Identidade da Plataforma */}
-        <div className="flex items-center justify-between gap-2 pb-3"
-          style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}>
+        {/* Identidade do Escritório (White-Label Multi-Tenant) */}
+        <div
+          className="flex items-center justify-between gap-2 pb-3"
+          style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}
+        >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'var(--color-accent)' }}
+            <button
+              type="button"
+              onClick={handleOpenEditBrand}
+              title="Alterar Logo e Nome do Escritório"
+              className="w-11 h-9 rounded-lg overflow-hidden shrink-0 flex items-center justify-center transition-transform hover:scale-105"
+              style={{
+                background: '#211E4A',
+                border: '1px solid var(--color-edge)',
+              }}
             >
-              <Scales size={16} weight="bold" style={{ color: 'var(--color-accent-on)' }} />
-            </div>
+              <img
+                src={displayOfficeLogo}
+                alt={displayOfficeName}
+                className="w-full h-full object-contain"
+              />
+            </button>
             <div className="min-w-0">
-              <p className="text-sm font-bold truncate" style={{ color: 'var(--color-ink)' }}>
-                GHFS Jurídico
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-bold truncate" style={{ color: 'var(--color-ink)' }}>
+                  {displayOfficeName}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenEditBrand}
+                  title="Personalizar Nome e Logo do Escritório"
+                  className="p-1 rounded hover:opacity-80 shrink-0"
+                  style={{ color: 'var(--color-ink-faint)' }}
+                >
+                  <PencilSimple size={12} weight="bold" />
+                </button>
+              </div>
               <p className="font-mono text-[11px] truncate" style={{ color: 'var(--color-ink-faint)' }}>
                 OAB {usuario.oab.numero}/{usuario.oab.uf}
               </p>
@@ -201,6 +294,101 @@ export function Sidebar({
             {roleInfo.label}
           </span>
         </div>
+
+        {/* Painel Rápido de Personalização da Marca do Escritório */}
+        {editingBrand && (
+          <form
+            onSubmit={e => void handleSaveBrand(e)}
+            className="p-3 rounded-xl space-y-3"
+            style={{
+              background: 'var(--color-surface-overlay)',
+              border: '1px solid rgba(224,159,62,0.35)',
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold" style={{ color: 'var(--color-accent)' }}>
+                Identidade do Escritório
+              </span>
+              <button
+                type="button"
+                onClick={() => setEditingBrand(false)}
+                style={{ color: 'var(--color-ink-faint)' }}
+              >
+                <X size={13} weight="bold" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div
+                className="w-16 h-11 rounded-lg overflow-hidden shrink-0 flex items-center justify-center"
+                style={{ background: '#211E4A', border: '1px solid var(--color-edge)' }}
+              >
+                <img src={officeLogo} alt="Preview Logo" className="w-full h-full object-contain" />
+              </div>
+              <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoFileChange}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center justify-center gap-1.5"
+                  style={{
+                    background: 'var(--color-surface-raised)',
+                    color: 'var(--color-ink)',
+                    border: '1px solid var(--color-edge)',
+                  }}
+                >
+                  <UploadSimple size={12} weight="bold" />
+                  Enviar Logo (PNG/SVG)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOfficeLogo(DEFAULT_ASO_LOGO_DATA_URL)}
+                  className="text-[10px] underline text-left"
+                  style={{ color: 'var(--color-ink-muted)' }}
+                >
+                  Usar Logo Vetor ASO Advogados
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-medium mb-1" style={{ color: 'var(--color-ink-muted)' }}>
+                Nome de Exibição do Escritório
+              </label>
+              <input
+                type="text"
+                value={officeName}
+                onChange={e => setOfficeName(e.target.value)}
+                placeholder="Ex: ASO Advogados"
+                className="w-full h-8 px-2.5 rounded-lg text-xs outline-none"
+                style={{
+                  background: 'var(--color-surface-input)',
+                  border: '1px solid var(--color-edge)',
+                  color: 'var(--color-ink)',
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingBrand}
+              className="w-full h-8 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5"
+              style={{
+                background: 'var(--color-accent)',
+                color: 'var(--color-accent-on)',
+              }}
+            >
+              <Check size={12} weight="bold" />
+              {savingBrand ? 'Salvando...' : 'Salvar Identidade'}
+            </button>
+          </form>
+        )}
 
         {/* Busca Rápida de Módulos e Páginas */}
         <div className="relative">

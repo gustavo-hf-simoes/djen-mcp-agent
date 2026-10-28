@@ -10,6 +10,7 @@ interface LayoutProps {
   onSyncNow: () => void
   syncing: boolean
   onLogout: () => void
+  onUpdateUsuario?: (usuario: UsuarioSessao) => void
 }
 
 export function Layout({
@@ -20,6 +21,7 @@ export function Layout({
   onSyncNow,
   syncing,
   onLogout,
+  onUpdateUsuario,
 }: LayoutProps) {
   return (
     <div className="min-h-dvh flex flex-col lg:flex-row" style={{ background: 'var(--color-surface)' }}>
@@ -30,6 +32,7 @@ export function Layout({
         onSyncNow={onSyncNow}
         syncing={syncing}
         onLogout={onLogout}
+        onUpdateUsuario={onUpdateUsuario}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">

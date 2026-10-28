@@ -21,6 +21,7 @@ export interface UsuarioSessao {
     nome: string | null
     slug: string | null
     plano: string | null
+    logoUrl?: string | null
   }
   oab: {
     numero: string
@@ -210,6 +211,20 @@ export async function buscarSessaoAtual(): Promise<{ usuario: UsuarioSessao }> {
 
 export async function buscarAdminOverview(): Promise<SaasAdminOverview> {
   return apiFetch<SaasAdminOverview>('/api/v1/auth/usuarios')
+}
+
+export async function atualizarIdentidadeEscritorio(payload: {
+  nome?: string
+  logoUrl?: string | null
+  escritorioId?: string
+}): Promise<{ escritorio: { id: string; nome: string; logoUrl: string | null } }> {
+  return apiFetch<{ escritorio: { id: string; nome: string; logoUrl: string | null } }>(
+    '/api/v1/auth/escritorio',
+    {
+      method: 'PATCH',
+      body: payload,
+    }
+  )
 }
 
 // ─── Endpoints de Controladoria Local (PostgreSQL) ────────────────────────────

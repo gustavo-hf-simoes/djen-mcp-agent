@@ -275,6 +275,7 @@ export function App() {
       onSyncNow={() => void handleSyncNow()}
       syncing={syncing}
       onLogout={handleLogout}
+      onUpdateUsuario={setUsuario}
     >
       {syncMessage && (
         <div
