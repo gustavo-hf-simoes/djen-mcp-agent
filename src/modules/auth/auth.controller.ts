@@ -12,9 +12,14 @@ declare global {
 
 export function extractBearerToken(req: Request): string | null {
   const header = req.headers.authorization;
-  if (!header || typeof header !== 'string') return null;
-  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
-  return match?.[1]?.trim() ?? null;
+  if (header && typeof header === 'string') {
+    const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  if (typeof req.query.token === 'string' && req.query.token.trim().length > 0) {
+    return req.query.token.trim();
+  }
+  return null;
 }
 
 export function requireAuth(enabled = true) {

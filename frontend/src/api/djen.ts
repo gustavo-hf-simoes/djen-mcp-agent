@@ -368,7 +368,15 @@ export function periodoUltimosDias(dias: number): { inicio: string; fim: string 
 
 // ─── Módulo Operacional · Triagem WhatsApp & Dossiê ───────────────────────────
 
-export type TipoCasoJuridico = 'RCV_BANCARIO' | 'ECOMMERCE_ML' | 'GERAL'
+export type TipoCasoJuridico =
+  | 'NAO_CLASSIFICADO'
+  | 'RCV_BANCARIO'
+  | 'ECOMMERCE_ML'
+  | 'CIVEL_CONSUMIDOR'
+  | 'TRIBUTARIO'
+  | 'TRABALHISTA'
+  | 'PENAL'
+  | 'GERAL'
 
 export interface ClienteTriagemResumo {
   id: string
@@ -394,6 +402,7 @@ export interface MensagemDossie {
   enviadaEm: string
   texto: string
   transcricao?: string
+  transcricaoEstado?: string
   explicacaoContextual?: string
   midia?: {
     id: string
@@ -402,11 +411,14 @@ export interface MensagemDossie {
     mimeType: string | null
     nomeArquivo: string
     estado: string
+    caminhoLocal?: string | null
+    resumoOcr?: string | null
   }
 }
 
 export interface DossieClienteCompleto {
   cliente: ClienteTriagemResumo
+  pastaFisicaRelativa?: string
   checklist: Array<{
     key: string
     label: string
@@ -470,4 +482,33 @@ export async function salvarConfiguracaoWhatsapp(payload: {
     method: 'PUT',
     body: payload,
   })
+}
+
+export function urlMidiaOperacional(documentoId: string, download = false): string {
+  const token = getStoredToken() ?? ''
+  const qs = new URLSearchParams()
+  if (token) qs.set('token', token)
+  if (download) qs.set('download', '1')
+  return `${BASE_URL}/api/v1/operacional/midia/${documentoId}?${qs.toString()}`
+}
+
+export async function baixarZipPastaCliente(clienteId: string, nomeCliente: string): Promise<void> {
+  const url = `${BASE_URL}/api/v1/operacional/clientes/${clienteId}/pasta-zip`
+  const token = getStoredToken()
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    throw new DjenError(`Falha ao baixar pasta do cliente (${response.status})`, response.status)
+  }
+  const blob = await response.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const safeName = nomeCliente.replace(/[^0-9A-Za-z._-]/g, '_')
+  link.href = blobUrl
+  link.download = `Pasta_Cliente_${safeName}.zip`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(blobUrl)
 }

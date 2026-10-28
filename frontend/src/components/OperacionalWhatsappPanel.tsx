@@ -15,6 +15,9 @@ import {
   LinkSimple,
   Sparkle,
   ShieldCheck,
+  DownloadSimple,
+  FolderSimple,
+  ArrowSquareOut,
 } from '@phosphor-icons/react'
 import {
   buscarClientesOperacional,
@@ -22,6 +25,8 @@ import {
   atualizarChecklistCliente,
   buscarConfiguracaoWhatsapp,
   salvarConfiguracaoWhatsapp,
+  urlMidiaOperacional,
+  baixarZipPastaCliente,
   type ClienteTriagemResumo,
   type DossieClienteCompleto,
   type ConfiguracaoWhatsappTenant,
@@ -29,20 +34,45 @@ import {
 } from '../api/djen'
 
 const TIPO_CASO_LABELS: Record<TipoCasoJuridico, { label: string; color: string; bg: string }> = {
+  NAO_CLASSIFICADO: {
+    label: 'Em Triagem · Área a Definir',
+    color: '#d4d4d8',
+    bg: 'rgba(212,212,216,0.12)',
+  },
+  RCV_BANCARIO: {
+    label: 'Bancário · Empréstimo / Revisional',
+    color: '#60a5fa',
+    bg: 'rgba(96,165,250,0.12)',
+  },
   ECOMMERCE_ML: {
     label: 'E-commerce · Mercado Livre',
     color: '#fbbf24',
     bg: 'rgba(251,191,36,0.12)',
   },
-  RCV_BANCARIO: {
-    label: 'Bancário · Revisional Veículo (RCV)',
-    color: '#60a5fa',
-    bg: 'rgba(96,165,250,0.12)',
-  },
-  GERAL: {
-    label: 'Cível / Geral',
+  CIVEL_CONSUMIDOR: {
+    label: 'Cível & Consumidor',
     color: '#a3e635',
     bg: 'rgba(163,230,53,0.12)',
+  },
+  TRIBUTARIO: {
+    label: 'Direito Tributário',
+    color: '#c084fc',
+    bg: 'rgba(192,132,252,0.12)',
+  },
+  TRABALHISTA: {
+    label: 'Direito Trabalhista',
+    color: '#38bdf8',
+    bg: 'rgba(56,189,248,0.12)',
+  },
+  PENAL: {
+    label: 'Direito Penal / Criminal',
+    color: '#f87171',
+    bg: 'rgba(248,113,113,0.12)',
+  },
+  GERAL: {
+    label: 'Consultivo / Geral',
+    color: '#9ca3af',
+    bg: 'rgba(156,163,175,0.12)',
   },
 }
 
@@ -73,6 +103,7 @@ export function OperacionalWhatsappPanel() {
   const [loadingList, setLoadingList] = useState(true)
   const [loadingDossie, setLoadingDossie] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [downloadingZip, setDownloadingZip] = useState(false)
 
   // Configuração do Webhook Meta Cloud API (Multi-tenant)
   const [showConfig, setShowConfig] = useState(false)
@@ -145,7 +176,7 @@ export function OperacionalWhatsappPanel() {
     }
   }, [selectedId, carregarDossie])
 
-  // Atualização em tempo real (a cada 5s) para exibir mensagens recebidas do celular sem precisar dar F5
+  // Atualização em tempo real (a cada 5s) para exibir mensagens e transcrições recebidas do celular
   useEffect(() => {
     const timer = setInterval(() => {
       void carregarClientes(true)
@@ -163,6 +194,18 @@ export function OperacionalWhatsappPanel() {
       if (selectedId) await carregarDossie(selectedId, true)
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  async function handleDownloadPastaZip() {
+    if (!dossie) return
+    setDownloadingZip(true)
+    try {
+      await baixarZipPastaCliente(dossie.cliente.id, dossie.cliente.nome)
+    } catch (err) {
+      console.error('Erro ao baixar pacote ZIP da pasta do cliente:', err)
+    } finally {
+      setDownloadingZip(false)
     }
   }
 
@@ -219,9 +262,10 @@ export function OperacionalWhatsappPanel() {
   function copiarMensagemCobrancaFaltantes() {
     if (!dossie) return
     const faltantes = dossie.checklist.filter(i => i.obrigatorio && !i.recebido)
+    const labelArea = TIPO_CASO_LABELS[dossie.cliente.tipoCaso]?.label ?? 'Atendimento Jurídico'
     const texto =
       faltantes.length === 0
-        ? `Olá ${dossie.cliente.nome}! Confirmamos o recebimento de toda a documentação necessária (${TIPO_CASO_LABELS[dossie.cliente.tipoCaso].label}). Já estamos gerando sua Procuração Digital para assinatura.`
+        ? `Olá ${dossie.cliente.nome}! Confirmamos o recebimento de toda a documentação necessária (${labelArea}). Já estamos gerando sua Procuração Digital para assinatura.`
         : `Olá ${dossie.cliente.nome}, tudo bem? Recebemos seu relato e os primeiros arquivos aqui no escritório!\n\nPara finalizarmos sua pasta e gerarmos a Procuração Digital, faltam apenas os seguintes documentos:\n${faltantes.map(f => `• *${f.label}* (${f.descricao})`).join('\n')}\n\nPode nos enviar por foto ou PDF aqui mesmo no WhatsApp!`
 
     void navigator.clipboard.writeText(texto)
@@ -233,20 +277,22 @@ export function OperacionalWhatsappPanel() {
     if (!dossie) return
     const docsRecebidos = dossie.checklist.filter(i => i.recebido).map(i => `✅ ${i.label}`).join('\n')
     const docsPendentes = dossie.checklist.filter(i => !i.recebido).map(i => `⏳ ${i.label}`).join('\n')
+    const labelArea = TIPO_CASO_LABELS[dossie.cliente.tipoCaso]?.label ?? dossie.cliente.tipoCaso
 
     const historicoFormatado = dossie.mensagens
       .map(m => {
         const data = formatHoraData(m.enviadaEm)
         if (m.tipo === 'audio') {
-          return `[${data}] ÁUDIO TRANSCRITO: "${m.transcricao ?? 'Áudio recebido'}"`
+          return `[${data}] ÁUDIO TRANSCRITO (${m.midia?.nomeArquivo ?? 'audio.ogg'}): "${m.transcricao ?? 'Em transcrição'}"`
         }
         if (m.midia) {
+          const ocr = m.midia.resumoOcr ? ` | Análise IA: ${m.midia.resumoOcr}` : ''
           const explicacao = m.explicacaoContextual
             ? ` -> Explicação dada pelo cliente na sequência: "${m.explicacaoContextual}"`
             : m.texto
             ? ` -> Legenda: "${m.texto}"`
             : ''
-          return `[${data}] ANEXO (${m.midia.tipoDoc} - ${m.midia.nomeArquivo})${explicacao}`
+          return `[${data}] ANEXO (${m.midia.tipoDoc} - ${m.midia.nomeArquivo})${ocr}${explicacao}`
         }
         return `[${data}] MENSAGEM DE TEXTO: "${m.texto}"`
       })
@@ -256,8 +302,9 @@ export function OperacionalWhatsappPanel() {
       `=== DOSSIÊ DE TRIAGEM JURÍDICA (WHATSAPP) ===`,
       `Cliente: ${dossie.cliente.nome}`,
       `Telefone: ${dossie.cliente.telefone}`,
-      `Natureza da Demanda: ${TIPO_CASO_LABELS[dossie.cliente.tipoCaso].label}`,
+      `Natureza da Demanda: ${labelArea}`,
       `Status da Pasta: ${dossie.cliente.status}`,
+      `Diretório Físico dos Arquivos: ${dossie.pastaFisicaRelativa ?? `storage/clientes/${dossie.cliente.id}`}`,
       ``,
       `--- SÍNTESE DOS FATOS ---`,
       dossie.cliente.resumoContexto,
@@ -296,7 +343,7 @@ export function OperacionalWhatsappPanel() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
-                Estação de Triagem WhatsApp & Dossiê do Cliente
+                Estação de Triagem WhatsApp & Pasta Digital do Cliente
               </h2>
               <span
                 className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
@@ -315,7 +362,7 @@ export function OperacionalWhatsappPanel() {
               )}
             </div>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-muted)' }}>
-              Recebe mensagens, áudios e documentos enviados pelos clientes na API Oficial da Meta e organiza a pasta para a inicial.
+              Baixa automaticamente os áudios, fotos e PDFs enviados no WhatsApp para a pasta física do cliente e transcreve áudios com IA.
             </p>
           </div>
         </div>
@@ -367,7 +414,7 @@ export function OperacionalWhatsappPanel() {
                 Guia de Implantação do Escritório · Meta WhatsApp Cloud API Oficial
               </h3>
               <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
-                Para que a Meta envie as mensagens reais do celular para este painel (em vez de retê-las apenas na <em>Etapa 1. Experimente</em>), conclua os <strong>3 passos obrigatórios da Meta</strong> abaixo:
+                Configuração central do Webhook e vínculo automático da Conta de Mensagens (WABA) do escritório:
               </p>
             </div>
           </div>
@@ -379,7 +426,7 @@ export function OperacionalWhatsappPanel() {
               style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
             >
               <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
-                Passo 1 · Webhook (Etapa 2 da Meta)
+                Passo 1 · Webhook Central do SaaS
               </p>
 
               <div className="space-y-1">
@@ -459,14 +506,14 @@ export function OperacionalWhatsappPanel() {
               style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
             >
               <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
-                Passo 2 · Liberar Disparo Externo na Meta
+                Passo 2 · Campo messages & Modo Ao Vivo
               </p>
               <ul className="text-xs space-y-1.5 leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
                 <li>
-                  • Em <strong>Campos do webhook</strong> (Etapa 2), role a tabela até a letra <strong>M</strong>, ative a chave <strong>Assinar</strong> na linha <code>messages</code> e clique em <strong>Teste</strong>.
+                  • Em <strong>Webhooks &gt; Whatsapp Business Account</strong>, mantenha a linha <code>messages</code> marcada como <strong>Assinado</strong>.
                 </li>
                 <li>
-                  • Para que mensagens do seu celular não fiquem retidas no modo de desenvolvimento, vire a chave no topo da Meta para <strong>Ao vivo</strong>. Caso a Meta peça a <em>URL da Política de Privacidade</em> em <em>Configurações do app &gt; Básico</em>, use o link abaixo:
+                  • Para colocar o App em <strong>Ao vivo</strong>, a Meta exige a <em>URL da Política de Privacidade</em> em <em>Configurações do app &gt; Básico</em>:
                 </li>
               </ul>
 
@@ -626,14 +673,14 @@ export function OperacionalWhatsappPanel() {
                 Aguardando primeira mensagem real
               </p>
               <p className="leading-relaxed">
-                Assim que a Meta disparar o evento <code>messages</code> para o nosso Webhook, o contato aparecerá automaticamente aqui.
+                Assim que o cliente enviar mensagem no WhatsApp conectado, o contato e os arquivos aparecerão automaticamente aqui.
               </p>
             </div>
           ) : (
             <div className="space-y-2 max-h-[680px] overflow-y-auto overscroll-contain pr-1">
               {clientes.map(cli => {
                 const isSelected = cli.id === selectedId
-                const casoMeta = TIPO_CASO_LABELS[cli.tipoCaso]
+                const casoMeta = TIPO_CASO_LABELS[cli.tipoCaso] ?? TIPO_CASO_LABELS.NAO_CLASSIFICADO
                 const origemMeta = ORIGEM_BADGE[cli.origem]
                 const completo = cli.checklistRecebidos >= cli.checklistTotal && cli.checklistTotal > 0
 
@@ -689,7 +736,7 @@ export function OperacionalWhatsappPanel() {
           )}
         </div>
 
-        {/* COLUNA 2 (CENTRO - 5 cols): HISTÓRICO CRONOLÓGICO UNIFICADO (TEXTOS + ÁUDIOS + IMAGENS AVULSAS EXPLICADAS) */}
+        {/* COLUNA 2 (CENTRO - 5 cols): HISTÓRICO CRONOLÓGICO UNIFICADO COM PLAYER DE ÁUDIO, TRANSCRIÇÃO IA E PREVIEW DE IMAGEM */}
         <div
           className="lg:col-span-5 rounded-2xl p-4 space-y-3 flex flex-col"
           style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
@@ -714,12 +761,12 @@ export function OperacionalWhatsappPanel() {
                     Histórico Cronológico da Conversa ({dossie.mensagens.length} mensagens)
                   </h3>
                   <p className="text-[11px]" style={{ color: 'var(--color-ink-muted)' }}>
-                    Imagens avulsas são automaticamente conectadas às mensagens de texto que o cliente digitou em seguida.
+                    Áudios com player e transcrição automática por IA · Imagens e PDFs salvos na pasta física do cliente.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-3 max-h-[620px] overflow-y-auto overscroll-contain pr-1">
+              <div className="space-y-3 max-h-[680px] overflow-y-auto overscroll-contain pr-1">
                 {dossie.mensagens.map((msg, idx) => {
                   const isAudio = msg.tipo === 'audio'
                   const isImage = msg.tipo === 'image'
@@ -728,7 +775,7 @@ export function OperacionalWhatsappPanel() {
                   return (
                     <div
                       key={msg.id}
-                      className="p-3.5 rounded-xl space-y-2"
+                      className="p-3.5 rounded-xl space-y-2.5"
                       style={{
                         background: 'var(--color-surface-overlay)',
                         border: isAudio
@@ -769,31 +816,92 @@ export function OperacionalWhatsappPanel() {
                         <span style={{ color: 'var(--color-ink-faint)' }}>{formatHoraData(msg.enviadaEm)}</span>
                       </div>
 
-                      {/* CARTÃO DE MÍDIA (IMAGEM OU PDF) */}
+                      {/* CARTÃO DE MÍDIA INTERATIVO (PLAYER DE ÁUDIO / PREVIEW DE IMAGEM / DOWNLOAD REAL) */}
                       {msg.midia && (
                         <div
-                          className="p-2.5 rounded-lg flex items-center justify-between gap-2"
+                          className="p-3 rounded-lg space-y-2.5"
                           style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)' }}
                         >
-                          <div className="min-w-0">
-                            <p className="text-xs font-mono font-semibold truncate" style={{ color: 'var(--color-ink)' }}>
-                              {msg.midia.nomeArquivo}
-                            </p>
-                            <p className="text-[10px]" style={{ color: 'var(--color-ink-faint)' }}>
-                              Classificação automática: <strong>{msg.midia.tipoDoc}</strong>
-                            </p>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="min-w-0">
+                              <p className="text-xs font-mono font-semibold truncate" style={{ color: 'var(--color-ink)' }}>
+                                {msg.midia.nomeArquivo}
+                              </p>
+                              <p className="text-[10px]" style={{ color: 'var(--color-ink-faint)' }}>
+                                Classificação IA: <strong>{msg.midia.tipoDoc}</strong>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <a
+                                href={urlMidiaOperacional(msg.midia.id, false)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1"
+                                style={{
+                                  background: 'var(--color-surface-overlay)',
+                                  border: '1px solid var(--color-edge)',
+                                  color: 'var(--color-ink)',
+                                }}
+                              >
+                                <ArrowSquareOut size={12} />
+                                Abrir
+                              </a>
+                              <a
+                                href={urlMidiaOperacional(msg.midia.id, true)}
+                                download={msg.midia.nomeArquivo}
+                                className="px-2 py-1 rounded text-[10px] font-semibold flex items-center gap-1"
+                                style={{
+                                  background: 'rgba(74,222,128,0.12)',
+                                  border: '1px solid rgba(74,222,128,0.28)',
+                                  color: '#4ade80',
+                                }}
+                              >
+                                <DownloadSimple size={12} weight="bold" />
+                                Baixar da Pasta
+                              </a>
+                            </div>
                           </div>
-                          <span
-                            className="text-[10px] font-semibold px-2 py-0.5 rounded shrink-0"
-                            style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
-                          >
-                            Arquivado na Pasta
-                          </span>
+
+                          {/* PLAYER DE ÁUDIO NATIVO */}
+                          {isAudio && (
+                            <audio
+                              controls
+                              preload="metadata"
+                              src={urlMidiaOperacional(msg.midia.id, false)}
+                              className="w-full h-9 rounded"
+                            />
+                          )}
+
+                          {/* PREVIEW REAL DA IMAGEM ENVIADA NO WHATSAPP */}
+                          {isImage && (
+                            <a
+                              href={urlMidiaOperacional(msg.midia.id, false)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block overflow-hidden rounded-lg border"
+                              style={{ borderColor: 'var(--color-edge-subtle)' }}
+                            >
+                              <img
+                                src={urlMidiaOperacional(msg.midia.id, false)}
+                                alt={msg.midia.nomeArquivo}
+                                loading="lazy"
+                                className="max-h-56 w-auto mx-auto object-contain"
+                              />
+                            </a>
+                          )}
+
+                          {/* DESCRIÇÃO AUTOMÁTICA DA IMAGEM/DOCUMENTO PELA IA */}
+                          {msg.midia.resumoOcr && (
+                            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
+                              <strong style={{ color: '#60a5fa' }}>Leitura Visual IA:</strong> {msg.midia.resumoOcr}
+                            </p>
+                          )}
                         </div>
                       )}
 
                       {/* TRANSCRIÇÃO AUTOMÁTICA DE ÁUDIO */}
-                      {msg.transcricao && (
+                      {isAudio && (
                         <div
                           className="p-3 rounded-lg space-y-1"
                           style={{
@@ -806,10 +914,12 @@ export function OperacionalWhatsappPanel() {
                             style={{ color: 'var(--color-accent)' }}
                           >
                             <Sparkle size={12} weight="fill" />
-                            Transcrição em Texto do Áudio
+                            Transcrição Automática em Texto (IA)
                           </p>
                           <p className="text-xs leading-relaxed italic" style={{ color: 'var(--color-ink)' }}>
-                            "{msg.transcricao}"
+                            {msg.transcricao
+                              ? `"${msg.transcricao}"`
+                              : 'Processando transcrição automática do áudio...'}
                           </p>
                         </div>
                       )}
@@ -850,7 +960,7 @@ export function OperacionalWhatsappPanel() {
           )}
         </div>
 
-        {/* COLUNA 3 (DIREITA - 4 cols): DOSSIÊ DO CLIENTE, CHECKLIST INTERATIVO & AÇÕES */}
+        {/* COLUNA 3 (DIREITA - 4 cols): PASTA FÍSICA DO CLIENTE, CHECKLIST INTERATIVO & AÇÕES */}
         <div
           className="lg:col-span-4 rounded-2xl p-4 space-y-4"
           style={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-edge)' }}
@@ -858,18 +968,19 @@ export function OperacionalWhatsappPanel() {
           {!dossie ? (
             <div className="p-6 text-xs text-center space-y-2" style={{ color: 'var(--color-ink-faint)' }}>
               <p className="font-semibold" style={{ color: 'var(--color-ink-muted)' }}>
-                Checklist Documental & Dossiê
+                Pasta Digital & Checklist Documental
               </p>
               <p>
-                Exibirá automaticamente os documentos obrigatórios (RCV Bancário ou E-commerce) e o botão de cobrança no WhatsApp assim que o cliente iniciar o contato.
+                Exibirá os arquivos baixados na pasta do cliente, a classificação jurídica e o checklist de documentos assim que o contato iniciar.
               </p>
             </div>
           ) : (
             <>
-              {/* Cabeçalho do Dossiê e Seletor de Tipo de Caso */}
-              <div className="space-y-2 pb-3" style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}>
+              {/* Cabeçalho do Dossiê e Seletor de Área do Direito */}
+              <div className="space-y-2.5 pb-3" style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}>
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
+                  <h3 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--color-ink)' }}>
+                    <FolderSimple size={17} weight="fill" style={{ color: 'var(--color-accent)' }} />
                     Pasta · {dossie.cliente.nome}
                   </h3>
                   <span
@@ -886,9 +997,38 @@ export function OperacionalWhatsappPanel() {
                   </span>
                 </div>
 
-                <div className="space-y-1">
+                {/* Caminho físico e botão de download da Pasta Completa (.ZIP) */}
+                <div
+                  className="p-2.5 rounded-xl flex items-center justify-between gap-2"
+                  style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold" style={{ color: 'var(--color-ink-muted)' }}>
+                      Diretório Físico ({dossie.cliente.totalDocumentos} arquivo(s) salvos):
+                    </p>
+                    <p className="text-[11px] font-mono truncate" style={{ color: 'var(--color-ink-faint)' }}>
+                      {dossie.pastaFisicaRelativa ?? `storage/clientes/${dossie.cliente.id}`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={downloadingZip}
+                    onClick={() => void handleDownloadPastaZip()}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold shrink-0 flex items-center gap-1.5 cursor-pointer"
+                    style={{
+                      background: 'rgba(74,222,128,0.14)',
+                      border: '1px solid rgba(74,222,128,0.32)',
+                      color: '#4ade80',
+                    }}
+                  >
+                    <DownloadSimple size={14} weight="bold" />
+                    {downloadingZip ? 'Gerando...' : 'Baixar Pasta (.ZIP)'}
+                  </button>
+                </div>
+
+                <div className="space-y-1 pt-1">
                   <label className="text-[11px] font-medium" style={{ color: 'var(--color-ink-faint)' }}>
-                    Enquadramento Jurídico / Tipo de Checklist:
+                    Área do Direito / Tipo de Causa (Definido na Triagem):
                   </label>
                   <select
                     value={dossie.cliente.tipoCaso}
@@ -900,9 +1040,14 @@ export function OperacionalWhatsappPanel() {
                       color: 'var(--color-ink)',
                     }}
                   >
-                    <option value="ECOMMERCE_ML">E-commerce · Mercado Livre (Golpe / Retenção)</option>
-                    <option value="RCV_BANCARIO">Direito Bancário · Revisional de Veículo (RCV)</option>
-                    <option value="GERAL">Cível Geral / Outros</option>
+                    <option value="NAO_CLASSIFICADO">Em Triagem · Área a Definir (Padrão Inicial)</option>
+                    <option value="RCV_BANCARIO">Direito Bancário · Empréstimo / Revisional / RCV</option>
+                    <option value="ECOMMERCE_ML">Direito Digital & E-commerce · Mercado Livre</option>
+                    <option value="CIVEL_CONSUMIDOR">Direito Cível & Consumidor</option>
+                    <option value="TRIBUTARIO">Direito Tributário</option>
+                    <option value="TRABALHISTA">Direito Trabalhista</option>
+                    <option value="PENAL">Direito Penal / Criminal</option>
+                    <option value="GERAL">Consultivo / Outros</option>
                   </select>
                 </div>
               </div>
@@ -987,7 +1132,7 @@ export function OperacionalWhatsappPanel() {
                 style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge-subtle)' }}
               >
                 <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--color-accent)' }}>
-                  Resumo Consolidado dos Fatos (Texto + Áudios)
+                  Resumo Consolidado dos Fatos (Texto + Áudios Transcritos)
                 </p>
                 <p className="text-xs whitespace-pre-line leading-relaxed" style={{ color: 'var(--color-ink-muted)' }}>
                   {dossie.cliente.resumoContexto}

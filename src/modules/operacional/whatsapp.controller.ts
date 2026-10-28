@@ -10,6 +10,14 @@ export interface WhatsAppWebhookServicePort {
   receberWebhook(rawBody: Buffer): Promise<{ mensagens: number; duplicado: boolean }>;
   listarClientes?(escritorioId?: string): Promise<ClienteTriagemResumo[]>;
   obterDossieCliente?(clienteId: string, escritorioId?: string): Promise<DossieClienteCompleto | null>;
+  obterArquivoMidia?(
+    documentoId: string,
+    escritorioId?: string
+  ): Promise<{ buffer: Buffer; mimeType: string; filename: string } | null>;
+  gerarZipPastaCliente?(
+    clienteId: string,
+    escritorioId?: string
+  ): Promise<{ zipBuffer: Buffer; zipFilename: string } | null>;
   atualizarChecklistCliente?(
     clienteId: string,
     payload: {
@@ -143,6 +151,47 @@ export class WhatsAppWebhookController {
     } catch (error) {
       console.error('Erro ao obter dossiê do cliente WhatsApp:', error);
       return res.status(500).json({ error: 'Erro ao carregar histórico e checklist do cliente.' });
+    }
+  }
+
+  async servirArquivoMidia(req: Request, res: Response) {
+    try {
+      if (!this.service.obterArquivoMidia) {
+        return res.status(501).json({ error: 'Download de mídia não implementado.' });
+      }
+      const documentoId = String(req.params.id || '');
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const arquivo = await this.service.obterArquivoMidia(documentoId, escritorioId);
+      if (!arquivo) {
+        return res.status(404).json({ error: 'Arquivo não encontrado na pasta do cliente.' });
+      }
+      const disposition = req.query.download === '1' ? 'attachment' : 'inline';
+      res.setHeader('Content-Type', arquivo.mimeType);
+      res.setHeader('Content-Disposition', `${disposition}; filename="${arquivo.filename}"`);
+      return res.status(200).send(arquivo.buffer);
+    } catch (error) {
+      console.error('Erro ao servir arquivo da pasta do cliente:', error);
+      return res.status(500).json({ error: 'Não foi possível abrir o arquivo da pasta do cliente.' });
+    }
+  }
+
+  async baixarZipPastaCliente(req: Request, res: Response) {
+    try {
+      if (!this.service.gerarZipPastaCliente) {
+        return res.status(501).json({ error: 'Exportação ZIP não implementada.' });
+      }
+      const clienteId = String(req.params.id || '');
+      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const pacote = await this.service.gerarZipPastaCliente(clienteId, escritorioId);
+      if (!pacote) {
+        return res.status(404).json({ error: 'Pasta do cliente não encontrada.' });
+      }
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${pacote.zipFilename}"`);
+      return res.status(200).send(pacote.zipBuffer);
+    } catch (error) {
+      console.error('Erro ao gerar ZIP da pasta do cliente:', error);
+      return res.status(500).json({ error: 'Erro ao gerar pacote ZIP da pasta do cliente.' });
     }
   }
 

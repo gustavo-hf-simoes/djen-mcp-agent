@@ -6,12 +6,31 @@ ALTER TABLE escritorios
   ADD COLUMN IF NOT EXISTS whatsapp_phone_number_id VARCHAR(80) UNIQUE,
   ADD COLUMN IF NOT EXISTS whatsapp_display_phone VARCHAR(40);
 
--- 2. Isolamento Multi-tenant e Tipo de Caso no schema operacional
+-- 2. Isolamento Multi-tenant e Tipo de Caso no schema operacional (Padrão: NAO_CLASSIFICADO)
 ALTER TABLE operacional.clientes
   ADD COLUMN IF NOT EXISTS escritorio_id UUID REFERENCES escritorios(id),
-  ADD COLUMN IF NOT EXISTS tipo_caso VARCHAR(40) NOT NULL DEFAULT 'ECOMMERCE_ML'
-    CHECK (tipo_caso IN ('RCV_BANCARIO', 'ECOMMERCE_ML', 'GERAL')),
+  ADD COLUMN IF NOT EXISTS tipo_caso VARCHAR(40) NOT NULL DEFAULT 'NAO_CLASSIFICADO',
   ADD COLUMN IF NOT EXISTS checklist_status JSONB NOT NULL DEFAULT '{}'::JSONB;
+
+ALTER TABLE operacional.clientes
+  ALTER COLUMN tipo_caso SET DEFAULT 'NAO_CLASSIFICADO';
+
+ALTER TABLE operacional.clientes
+  DROP CONSTRAINT IF EXISTS clientes_tipo_caso_check;
+
+ALTER TABLE operacional.clientes
+  ADD CONSTRAINT clientes_tipo_caso_check CHECK (
+    tipo_caso IN (
+      'NAO_CLASSIFICADO',
+      'RCV_BANCARIO',
+      'ECOMMERCE_ML',
+      'CIVEL_CONSUMIDOR',
+      'TRIBUTARIO',
+      'TRABALHISTA',
+      'PENAL',
+      'GERAL'
+    )
+  );
 
 CREATE INDEX IF NOT EXISTS ix_operacional_clientes_escritorio
   ON operacional.clientes (escritorio_id, updated_at DESC);
@@ -32,7 +51,7 @@ ALTER TABLE operacional.mensagens
     )
   );
 
--- 4. Correção da coluna media_kind em operacional.documentos (mapeada como bug no README)
+-- 4. Correção da coluna media_kind em operacional.documentos
 ALTER TABLE operacional.documentos
   ADD COLUMN IF NOT EXISTS media_kind VARCHAR(30) NOT NULL DEFAULT 'DOCUMENT';
 

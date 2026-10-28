@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Pool } from 'pg';
+import { buildZipBuffer, type ZipEntryInput } from '../djen/application/zip-builder';
 import { decryptValue, encryptValue, phoneHmac } from './whatsapp.crypto';
 
 type JsonRecord = Record<string, unknown>;
@@ -9,7 +12,15 @@ export interface WhatsAppSecrets {
   phoneHashKey?: Buffer;
 }
 
-export type TipoCasoJuridico = 'RCV_BANCARIO' | 'ECOMMERCE_ML' | 'GERAL';
+export type TipoCasoJuridico =
+  | 'NAO_CLASSIFICADO'
+  | 'RCV_BANCARIO'
+  | 'ECOMMERCE_ML'
+  | 'CIVEL_CONSUMIDOR'
+  | 'TRIBUTARIO'
+  | 'TRABALHISTA'
+  | 'PENAL'
+  | 'GERAL';
 
 export interface ChecklistTemplateItem {
   key: string;
@@ -19,6 +30,52 @@ export interface ChecklistTemplateItem {
 }
 
 export const CHECKLIST_TEMPLATES: Record<TipoCasoJuridico, ChecklistTemplateItem[]> = {
+  NAO_CLASSIFICADO: [
+    {
+      key: 'DOC_IDENTIDADE',
+      label: 'RG ou CNH do Cliente',
+      obrigatorio: true,
+      descricao: 'Documento oficial com foto para qualificação básica inicial'
+    },
+    {
+      key: 'COMPROVANTE_ENDERECO',
+      label: 'Comprovante de Endereço Atualizado',
+      obrigatorio: true,
+      descricao: 'Conta de consumo (luz, água, internet) dos últimos 90 dias'
+    },
+    {
+      key: 'PROVAS_INICIAIS',
+      label: 'Documentos / Prints Relacionados ao Caso',
+      obrigatorio: false,
+      descricao: 'Contratos, conversas, comprovantes ou notificações recebidas'
+    }
+  ],
+  RCV_BANCARIO: [
+    {
+      key: 'DOC_IDENTIDADE',
+      label: 'RG ou CNH do Titular / Financiado',
+      obrigatorio: true,
+      descricao: 'Documento de identificação com CPF'
+    },
+    {
+      key: 'COMPROVANTE_ENDERECO',
+      label: 'Comprovante de Residência',
+      obrigatorio: true,
+      descricao: 'Comprovante em nome do autor para definição de competência'
+    },
+    {
+      key: 'CONTRATO_FINANCIAMENTO',
+      label: 'Contrato do Empréstimo / Financiamento (CCB)',
+      obrigatorio: true,
+      descricao: 'Cópia do contrato bancário com taxas de juros, CET e tarifas embutidas'
+    },
+    {
+      key: 'EXTRATO_PARCELAS',
+      label: 'Extrato do Empréstimo / Carnê de Parcelas ou CRLV',
+      obrigatorio: true,
+      descricao: 'Demonstrativo de evolução da dívida, descontos ou documento do bem'
+    }
+  ],
   ECOMMERCE_ML: [
     {
       key: 'DOC_IDENTIDADE',
@@ -34,7 +91,7 @@ export const CHECKLIST_TEMPLATES: Record<TipoCasoJuridico, ChecklistTemplateItem
     },
     {
       key: 'PRINTS_PLATAFORMA_ML',
-      label: 'Prints da Reclamação / Mediação Mercado Livre',
+      label: 'Prints da Reclamação / Mediação na Plataforma',
       obrigatorio: true,
       descricao: 'Telas da venda, mensagens do comprador e encerramento da mediação'
     },
@@ -51,36 +108,90 @@ export const CHECKLIST_TEMPLATES: Record<TipoCasoJuridico, ChecklistTemplateItem
       descricao: 'Demonstrativo do débito ou bloqueio indevido na conta do vendedor'
     }
   ],
-  RCV_BANCARIO: [
+  CIVEL_CONSUMIDOR: [
     {
       key: 'DOC_IDENTIDADE',
-      label: 'RG ou CNH do Financiado',
+      label: 'RG ou CNH',
       obrigatorio: true,
-      descricao: 'Documento de identificação com CPF'
+      descricao: 'Documento de identificação civil'
+    },
+    {
+      key: 'COMPROVANTE_ENDERECO',
+      label: 'Comprovante de Endereço',
+      obrigatorio: true,
+      descricao: 'Comprovante atualizado (últimos 90 dias)'
+    },
+    {
+      key: 'NOTA_FISCAL_OU_CONTRATO',
+      label: 'Nota Fiscal, Fatura ou Contrato de Prestação',
+      obrigatorio: true,
+      descricao: 'Prova da relação jurídica / consumo'
+    },
+    {
+      key: 'PROTOCOLOS_E_PRINTS',
+      label: 'Protocolos de Atendimento / Prints da Falha ou Negativação',
+      obrigatorio: true,
+      descricao: 'Registros de tentativa de solução ou comprovante do dano'
+    }
+  ],
+  TRIBUTARIO: [
+    {
+      key: 'DOC_IDENTIDADE',
+      label: 'RG/CNH do Contribuinte ou Contrato Social (PJ)',
+      obrigatorio: true,
+      descricao: 'Qualificação do contribuinte ou ato constitutivo da empresa'
+    },
+    {
+      key: 'COMPROVANTE_ENDERECO',
+      label: 'Comprovante de Endereço / Cartão CNPJ',
+      obrigatorio: true,
+      descricao: 'Comprovante fiscal de domicílio'
+    },
+    {
+      key: 'CDA_OU_AUTO_INFRACAO',
+      label: 'Certidão de Dívida Ativa (CDA) / Notificação Fiscal / DARF',
+      obrigatorio: true,
+      descricao: 'Espelho do débito tributário, execução fiscal ou guias recolhidas'
+    }
+  ],
+  TRABALHISTA: [
+    {
+      key: 'DOC_IDENTIDADE',
+      label: 'RG, CNH e CTPS (Carteira de Trabalho Digital)',
+      obrigatorio: true,
+      descricao: 'Identificação e registros de contrato de trabalho'
     },
     {
       key: 'COMPROVANTE_ENDERECO',
       label: 'Comprovante de Residência',
       obrigatorio: true,
-      descricao: 'Comprovante em nome do autor para definição de competência'
+      descricao: 'Comprovante atualizado'
     },
     {
-      key: 'CONTRATO_FINANCIAMENTO',
-      label: 'Contrato do Financiamento / Cédula de Crédito Bancário (CCB)',
+      key: 'TRCT_HOLERITES_FGTS',
+      label: 'Termo de Rescisão (TRCT), Holerites e Extrato Analítico FGTS',
       obrigatorio: true,
-      descricao: 'Cópia do contrato com taxas de juros, CET e tarifas embutidas ( seguro prestamista / avaliação )'
-    },
+      descricao: 'Documentos salariais e rescisórios para cálculo trabalhista'
+    }
+  ],
+  PENAL: [
     {
-      key: 'DOCUMENTO_VEICULO_CRLV',
-      label: 'CRLV do Veículo Financiado',
+      key: 'DOC_IDENTIDADE',
+      label: 'RG ou CNH do Constituinte',
       obrigatorio: true,
-      descricao: 'Documento do veículo com indicação da alienação fiduciária'
+      descricao: 'Documento oficial com foto'
     },
     {
-      key: 'CARNE_COMPROVANTES_PARCELAS',
-      label: 'Carnê ou Extrato de Parcelas Pagas / Em Atraso',
-      obrigatorio: false,
-      descricao: 'Histórico de evolução do saldo devedor ou notificações do banco'
+      key: 'COMPROVANTE_ENDERECO',
+      label: 'Comprovante de Residência Fixa e Ocupação Lícita',
+      obrigatorio: true,
+      descricao: 'Essencial para pedidos de liberdade / resposta à acusação'
+    },
+    {
+      key: 'BOLETIM_OCORRENCIA_INQUERITO',
+      label: 'Boletim de Ocorrência, Intimação Policial ou Autos do Inquérito',
+      obrigatorio: true,
+      descricao: 'Cópia da peça policial ou mandado recebido'
     }
   ],
   GERAL: [
@@ -154,6 +265,7 @@ export interface MensagemDossie {
   enviadaEm: string;
   texto: string;
   transcricao?: string;
+  transcricaoEstado?: string;
   explicacaoContextual?: string;
   midia?: {
     id: string;
@@ -162,11 +274,14 @@ export interface MensagemDossie {
     mimeType: string | null;
     nomeArquivo: string;
     estado: string;
+    caminhoLocal?: string | null;
+    resumoOcr?: string | null;
   };
 }
 
 export interface DossieClienteCompleto {
   cliente: ClienteTriagemResumo;
+  pastaFisicaRelativa: string;
   checklist: Array<
     ChecklistTemplateItem & {
       recebido: boolean;
@@ -205,11 +320,12 @@ function classifyDocumentFromText(filename?: string, caption?: string): string {
     combined.includes('copel') ||
     combined.includes('sanepar') ||
     combined.includes('fatura') ||
-    combined.includes('residencia')
+    combined.includes('residencia') ||
+    combined.includes('conta de luz')
   ) {
     return 'COMPROVANTE_ENDERECO';
   }
-  if (combined.includes('contrato') || combined.includes('ccb') || combined.includes('financiamento')) {
+  if (combined.includes('contrato') || combined.includes('ccb') || combined.includes('financiamento') || combined.includes('empréstimo')) {
     return 'CONTRATO';
   }
   if (combined.includes('procuracao') || combined.includes('procuração')) {
@@ -218,33 +334,22 @@ function classifyDocumentFromText(filename?: string, caption?: string): string {
   return 'DOCUMENTO_COMPROBATORIO';
 }
 
-function detectCaseTypeFromText(allText: string, currentType?: string): TipoCasoJuridico {
-  const lower = allText.toLowerCase();
-  if (
-    lower.includes('veículo') ||
-    lower.includes('veiculo') ||
-    lower.includes('financiamento') ||
-    lower.includes('juros abusivos') ||
-    lower.includes('busca e apreensão') ||
-    lower.includes('parcela do carro') ||
-    lower.includes('ccb')
-  ) {
-    return 'RCV_BANCARIO';
+const VALID_TIPOS_CASO: TipoCasoJuridico[] = [
+  'NAO_CLASSIFICADO',
+  'RCV_BANCARIO',
+  'ECOMMERCE_ML',
+  'CIVEL_CONSUMIDOR',
+  'TRIBUTARIO',
+  'TRABALHISTA',
+  'PENAL',
+  'GERAL'
+];
+
+function normalizeTipoCaso(value: unknown): TipoCasoJuridico {
+  if (typeof value === 'string' && VALID_TIPOS_CASO.includes(value as TipoCasoJuridico)) {
+    return value as TipoCasoJuridico;
   }
-  if (
-    lower.includes('mercado livre') ||
-    lower.includes('mercado pago') ||
-    lower.includes('comprador') ||
-    lower.includes('devolução') ||
-    lower.includes('correios') ||
-    lower.includes('venda')
-  ) {
-    return 'ECOMMERCE_ML';
-  }
-  if (currentType === 'RCV_BANCARIO' || currentType === 'ECOMMERCE_ML' || currentType === 'GERAL') {
-    return currentType;
-  }
-  return 'ECOMMERCE_ML';
+  return 'NAO_CLASSIFICADO';
 }
 
 function autoEvaluateChecklist(
@@ -261,7 +366,8 @@ function autoEvaluateChecklist(
     docTypes.includes('RG') ||
     docTypes.includes('CPF') ||
     lower.includes('cnh') ||
-    lower.includes('rg')
+    lower.includes('rg') ||
+    lower.includes('identidade')
   ) {
     next.DOC_IDENTIDADE = true;
   }
@@ -270,7 +376,8 @@ function autoEvaluateChecklist(
     lower.includes('comprovante de endereço') ||
     lower.includes('comprovante de residencia') ||
     lower.includes('conta de luz') ||
-    lower.includes('copel')
+    lower.includes('copel') ||
+    lower.includes('sanepar')
   ) {
     next.COMPROVANTE_ENDERECO = true;
   }
@@ -294,23 +401,31 @@ function autoEvaluateChecklist(
     if (docTypes.includes('CONTRATO') || lower.includes('contrato') || lower.includes('ccb')) {
       next.CONTRATO_FINANCIAMENTO = true;
     }
-    if (lower.includes('crlv') || lower.includes('documento do carro') || lower.includes('documento do veículo')) {
-      next.DOCUMENTO_VEICULO_CRLV = true;
+    if (lower.includes('extrato') || lower.includes('carnê') || lower.includes('parcela') || lower.includes('crlv')) {
+      next.EXTRATO_PARCELAS = true;
     }
-    if (lower.includes('carnê') || lower.includes('carne') || lower.includes('parcela') || lower.includes('boleto')) {
-      next.CARNE_COMPROVANTES_PARCELAS = true;
+  } else if (tipoCaso === 'NAO_CLASSIFICADO') {
+    if (docTypes.length > 0) {
+      next.PROVAS_INICIAIS = true;
     }
   }
 
   return next;
 }
 
-/** Processa eventos recebidos e persiste dados sensíveis cifrados numa transação. */
+/** Processa eventos recebidos, baixa mídias reais na pasta do cliente e transcreve áudios com IA. */
 export class WhatsAppWebhookService {
+  private readonly storageRoot = join(process.cwd(), 'storage', 'clientes');
+  private readonly processingClients = new Set<string>();
+
   constructor(
     private readonly pool: Pool,
     private readonly secrets: WhatsAppSecrets
-  ) {}
+  ) {
+    if (!existsSync(this.storageRoot)) {
+      mkdirSync(this.storageRoot, { recursive: true });
+    }
+  }
 
   private ensureKeys(): { encryptionKey: Buffer; phoneHashKey: Buffer } {
     const encryptionKey = this.secrets.encryptionKey;
@@ -345,11 +460,11 @@ export class WhatsAppWebhookService {
     const eventHash = createHash('sha256').update(rawBody).digest('hex');
     const encryptedEvent = encryptValue(rawBody, encryptionKey);
     const client = await this.pool.connect();
+    const touchedClients = new Set<string>();
 
     try {
       await client.query('BEGIN');
 
-      // Resolve o escritório (Multi-tenant) pelo phone_number_id da Meta ou usa o escritório piloto padrão
       let escritorioId: string | null = null;
       if (phoneNumberId) {
         const tenantMatch = await client.query(
@@ -391,7 +506,6 @@ export class WhatsAppWebhookService {
 
       const eventId = eventInsert.rows[0].id as string;
       let persistedMessages = 0;
-      const touchedClients = new Set<string>();
 
       for (const message of messages) {
         const phone = phoneHmac(message.phone, phoneHashKey);
@@ -422,8 +536,9 @@ export class WhatsAppWebhookService {
           const clientName = message.encryptedName;
           const clientInsert = await client.query(
             `INSERT INTO operacional.clientes (
-              nome_cifrado, nome_nonce, nome_tag, origem, primeiro_ad_id, primeiro_ctwa_clid, escritorio_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+              nome_cifrado, nome_nonce, nome_tag, origem, primeiro_ad_id, primeiro_ctwa_clid,
+              escritorio_id, tipo_caso
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'NAO_CLASSIFICADO')
             RETURNING id`,
             [
               ...encryptedColumns('nome', clientName),
@@ -488,7 +603,7 @@ export class WhatsAppWebhookService {
               media_id_cifrado, media_id_nonce, media_id_tag,
               nome_original_cifrado, nome_original_nonce, nome_original_tag,
               estado, classificado_por
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PRONTO', 'REGRA')`,
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'PENDENTE_DOWNLOAD', 'REVISAO_PENDENTE')`,
             [
               clientId,
               messageInsert.rows[0].id,
@@ -504,7 +619,6 @@ export class WhatsAppWebhookService {
         }
       }
 
-      // Atualiza automaticamente o dossiê, checklist e resumo cronológico para cada cliente impactado
       for (const clientId of touchedClients) {
         await this.recalcularDossieTransacional(client, clientId, encryptionKey);
       }
@@ -516,7 +630,6 @@ export class WhatsAppWebhookService {
         [eventId]
       );
       await client.query('COMMIT');
-      return { mensagens: persistedMessages, duplicado: false };
     } catch (error) {
       try {
         await client.query('ROLLBACK');
@@ -526,6 +639,307 @@ export class WhatsAppWebhookService {
       throw error;
     } finally {
       client.release();
+    }
+
+    // Dispara em background imediato o download na pasta física e a transcrição/OCR das mídias recebidas
+    for (const clientId of touchedClients) {
+      void this.processarMidiasPendentesCliente(clientId).catch(err => {
+        console.error(`Erro no processamento assíncrono de mídia do cliente ${clientId}:`, err);
+      });
+    }
+
+    return { mensagens: messages.length, duplicado: false };
+  }
+
+  /**
+   * Baixa os arquivos reais da Graph API da Meta para storage/clientes/{clienteId}/,
+   * transcreve os áudios em português usando Gemini 3.8 Flash e analisa imagens/documentos.
+   */
+  async processarMidiasPendentesCliente(clienteId: string): Promise<{ processados: number }> {
+    if (this.processingClients.has(clienteId)) {
+      return { processados: 0 };
+    }
+    this.processingClients.add(clienteId);
+
+    try {
+      const { encryptionKey } = this.ensureKeys();
+      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      if (!accessToken) {
+        return { processados: 0 };
+      }
+
+      const pendentes = await this.pool.query(
+        `SELECT
+          d.id AS doc_id,
+          d.mensagem_id,
+          d.media_kind,
+          d.mime_type,
+          d.caminho_local,
+          d.texto_ocr_cifrado,
+          d.media_id_cifrado, d.media_id_nonce, d.media_id_tag,
+          d.nome_original_cifrado, d.nome_original_nonce, d.nome_original_tag,
+          m.transcricao_estado,
+          m.enviada_em
+         FROM operacional.documentos d
+         JOIN operacional.mensagens m ON m.id = d.mensagem_id
+         WHERE d.cliente_id = $1
+           AND (
+             d.caminho_local IS NULL
+             OR (d.media_kind = 'AUDIO' AND m.transcricao_estado != 'PRONTA')
+             OR (d.media_kind IN ('IMAGE', 'DOCUMENT') AND d.texto_ocr_cifrado IS NULL)
+           )
+         ORDER BY m.enviada_em ASC`,
+        [clienteId]
+      );
+
+      if (pendentes.rows.length === 0) return { processados: 0 };
+
+      const clientFolder = join(this.storageRoot, clienteId);
+      if (!existsSync(clientFolder)) {
+        mkdirSync(clientFolder, { recursive: true });
+      }
+
+      let processados = 0;
+
+      for (const row of pendentes.rows) {
+        const mediaId = this.safeDecryptText(row.media_id_cifrado, row.media_id_nonce, row.media_id_tag);
+        if (!mediaId) continue;
+
+        let fileBuffer: Buffer | null = null;
+        let localPath: string | null = row.caminho_local ?? null;
+        let mimeType: string = String(row.mime_type || 'application/octet-stream').split(';')[0]!.trim();
+
+        if (localPath && existsSync(localPath)) {
+          fileBuffer = readFileSync(localPath);
+        } else {
+          // 1. Consulta URL de download na Graph API da Meta
+          const metaInfoRes = await fetch(`https://graph.facebook.com/v25.0/${mediaId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: AbortSignal.timeout(15000)
+          });
+          if (!metaInfoRes.ok) continue;
+          const metaInfo = (await metaInfoRes.json()) as { url?: string; mime_type?: string };
+          if (!metaInfo.url) continue;
+          if (metaInfo.mime_type) {
+            mimeType = metaInfo.mime_type.split(';')[0]!.trim();
+          }
+
+          // 2. Baixa os bytes reais do arquivo (áudio, imagem ou PDF)
+          const binRes = await fetch(metaInfo.url, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: AbortSignal.timeout(20000)
+          });
+          if (!binRes.ok) continue;
+          fileBuffer = Buffer.from(await binRes.arrayBuffer());
+
+          const originalName = this.safeDecryptText(
+            row.nome_original_cifrado,
+            row.nome_original_nonce,
+            row.nome_original_tag
+          );
+          const ext =
+            mimeType.includes('ogg') || row.media_kind === 'AUDIO'
+              ? 'ogg'
+              : mimeType.includes('jpeg') || mimeType.includes('jpg')
+              ? 'jpg'
+              : mimeType.includes('png')
+              ? 'png'
+              : mimeType.includes('pdf')
+              ? 'pdf'
+              : 'bin';
+
+          const dateTag = new Date(row.enviada_em).toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const baseName = originalName
+            ? originalName.replace(/[^a-zA-Z0-9._-]/g, '_')
+            : `${row.media_kind}_${dateTag}_${String(row.doc_id).slice(0, 6)}.${ext}`;
+
+          localPath = join(clientFolder, baseName);
+          writeFileSync(localPath, fileBuffer);
+
+          const sha256 = createHash('sha256').update(fileBuffer).digest('hex');
+          const encryptedFileName = encryptValue(baseName, encryptionKey);
+
+          await this.pool.query(
+            `UPDATE operacional.documentos
+             SET caminho_local = $2,
+                 sha256_arquivo = $3,
+                 estado = 'PRONTO',
+                 nome_original_cifrado = COALESCE(nome_original_cifrado, $4),
+                 nome_original_nonce = COALESCE(nome_original_nonce, $5),
+                 nome_original_tag = COALESCE(nome_original_tag, $6)
+             WHERE id = $1`,
+            [
+              row.doc_id,
+              localPath,
+              sha256,
+              encryptedFileName.ciphertext,
+              encryptedFileName.nonce,
+              encryptedFileName.tag
+            ]
+          );
+        }
+
+        if (!fileBuffer) continue;
+
+        // 3. Se for ÁUDIO, transcreve o conteúdo falado com Gemini 3.8 Flash
+        if (row.media_kind === 'AUDIO' && row.transcricao_estado !== 'PRONTA') {
+          const transcricao = await this.transcreverAudioComIA(fileBuffer, mimeType || 'audio/ogg');
+          if (transcricao) {
+            const encTransc = encryptValue(transcricao, encryptionKey);
+            await this.pool.query(
+              `UPDATE operacional.mensagens
+               SET transcricao_cifrada = $2,
+                   transcricao_nonce = $3,
+                   transcricao_tag = $4,
+                   transcricao_estado = 'PRONTA'
+               WHERE id = $1`,
+              [row.mensagem_id, encTransc.ciphertext, encTransc.nonce, encTransc.tag]
+            );
+          }
+        }
+
+        // 4. Se for IMAGEM ou PDF, analisa visualmente com IA para identificar o documento
+        if ((row.media_kind === 'IMAGE' || row.media_kind === 'DOCUMENT') && !row.texto_ocr_cifrado) {
+          const analise = await this.analisarDocumentoOuImagemComIA(fileBuffer, mimeType);
+          if (analise) {
+            const encOcr = encryptValue(analise.descricaoCurta, encryptionKey);
+            await this.pool.query(
+              `UPDATE operacional.documentos
+               SET tipo_doc = $2,
+                   texto_ocr_cifrado = $3,
+                   texto_ocr_nonce = $4,
+                   texto_ocr_tag = $5,
+                   classificado_por = 'REGRA'
+               WHERE id = $1`,
+              [row.doc_id, analise.tipoDoc, encOcr.ciphertext, encOcr.nonce, encOcr.tag]
+            );
+          }
+        }
+
+        processados++;
+      }
+
+      // Recalcula o dossiê com as novas transcrições e documentos identificados
+      const client = await this.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await this.recalcularDossieTransacional(client, clienteId, encryptionKey);
+        await client.query('COMMIT');
+      } catch {
+        await client.query('ROLLBACK');
+      } finally {
+        client.release();
+      }
+
+      return { processados };
+    } finally {
+      this.processingClients.delete(clienteId);
+    }
+  }
+
+  private async transcreverAudioComIA(audioBuffer: Buffer, mimeType: string): Promise<string | null> {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) return null;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: 'Transcreva fielmente em português o áudio enviado pelo cliente ao escritório de advocacia. Retorne apenas o texto falado, sem comentários adicionais.'
+                  },
+                  {
+                    inline_data: {
+                      mime_type: mimeType.startsWith('audio/') ? mimeType : 'audio/ogg',
+                      data: audioBuffer.toString('base64')
+                    }
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      );
+
+      if (!response.ok) return null;
+      const data = (await response.json()) as any;
+      const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+      const text = parts.filter(p => !p?.thought && typeof p?.text === 'string').pop()?.text ?? parts[0]?.text;
+      return typeof text === 'string' && text.trim().length > 0 ? text.trim() : null;
+    } catch (err) {
+      console.warn('Falha ao transcrever áudio com Gemini:', err);
+      return null;
+    }
+  }
+
+  private async analisarDocumentoOuImagemComIA(
+    fileBuffer: Buffer,
+    mimeType: string
+  ): Promise<{ tipoDoc: string; descricaoCurta: string } | null> {
+    const geminiKey = process.env.GEMINI_API_KEY;
+    if (!geminiKey) return null;
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(20000),
+          body: JSON.stringify({
+            generationConfig: {
+              responseMimeType: 'application/json'
+            },
+            contents: [
+              {
+                parts: [
+                  {
+                    text: 'Analise esta imagem ou documento enviado por um cliente a um escritório de advocacia. Responda em JSON com os campos: "tipoDoc" (escolha estritamente um entre: "RG", "CPF", "CNH", "COMPROVANTE_ENDERECO", "CONTRATO", "PROCURACAO", "DOCUMENTO_COMPROBATORIO", "OUTRO") e "descricaoCurta" (uma frase curta em português descrevendo o que é o arquivo/imagem).'
+                  },
+                  {
+                    inline_data: {
+                      mime_type: mimeType,
+                      data: fileBuffer.toString('base64')
+                    }
+                  }
+                ]
+              }
+            ]
+          })
+        }
+      );
+
+      if (!response.ok) return null;
+      const data = (await response.json()) as any;
+      const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+      const rawText = parts.filter(p => !p?.thought && typeof p?.text === 'string').pop()?.text ?? parts[0]?.text;
+      if (typeof rawText !== 'string') return null;
+
+      const parsed = JSON.parse(rawText) as { tipoDoc?: string; descricaoCurta?: string };
+      const allowed = [
+        'RG',
+        'CPF',
+        'CNH',
+        'COMPROVANTE_ENDERECO',
+        'CONTRATO',
+        'PROCURACAO',
+        'PROCURACAO_ASSINADA',
+        'DOCUMENTO_COMPROBATORIO',
+        'OUTRO',
+        'NAO_CLASSIFICADO'
+      ];
+      const tipoDoc = allowed.includes(String(parsed.tipoDoc)) ? String(parsed.tipoDoc) : 'DOCUMENTO_COMPROBATORIO';
+      const descricaoCurta = parsed.descricaoCurta ? String(parsed.descricaoCurta).trim() : 'Arquivo recebido pelo WhatsApp';
+      return { tipoDoc, descricaoCurta };
+    } catch {
+      return null;
     }
   }
 
@@ -574,14 +988,13 @@ export class WhatsAppWebhookService {
         }
       }
       if (transcricao) {
-        narratives.push(`[Áudio Transcrito]: ${transcricao}`);
+        narratives.push(`[Áudio Transcrito]: "${transcricao}"`);
       }
     }
 
     const combinedText = narratives.join(' | ');
     const docTypes = docsRes.rows.map(r => String(r.tipo_doc));
-    const currentTipoCaso = String(clienteRow.rows[0].tipo_caso || 'ECOMMERCE_ML');
-    const detectedTipoCaso = detectCaseTypeFromText(combinedText, currentTipoCaso);
+    const detectedTipoCaso = normalizeTipoCaso(clienteRow.rows[0].tipo_caso);
 
     const existingChecklist = isRecord(clienteRow.rows[0].checklist_status)
       ? (clienteRow.rows[0].checklist_status as Record<string, boolean>)
@@ -597,7 +1010,7 @@ export class WhatsAppWebhookService {
 
     const resumoEstruturado =
       narratives.length > 0
-        ? narratives.slice(-5).join('\n• ')
+        ? narratives.slice(-8).join('\n• ')
         : 'Aguardando relato detalhado do cliente pelo WhatsApp.';
     const encryptedResumo = encryptValue(`• ${resumoEstruturado}`, encryptionKey);
 
@@ -629,7 +1042,6 @@ export class WhatsAppWebhookService {
     payload: JsonRecord,
     encryptionKey: Buffer
   ): { messages: IncomingMessage[]; phoneNumberId?: string } {
-    // Suporta tanto o envelope WABA completo (entry[].changes[]) quanto o formato direto do botão "Teste" do painel da Meta (field + value na raiz)
     const entries = Array.isArray(payload.entry)
       ? payload.entry
       : isRecord(payload.value)
@@ -756,10 +1168,7 @@ export class WhatsAppWebhookService {
       this.safeDecryptText(row.resumo_cifrado, row.resumo_nonce, row.resumo_tag) ??
       'Sem resumo consolidado até o momento.';
 
-    const tipoCaso: TipoCasoJuridico =
-      row.tipo_caso === 'RCV_BANCARIO' || row.tipo_caso === 'ECOMMERCE_ML' || row.tipo_caso === 'GERAL'
-        ? row.tipo_caso
-        : 'ECOMMERCE_ML';
+    const tipoCaso: TipoCasoJuridico = normalizeTipoCaso(row.tipo_caso);
 
     const template = CHECKLIST_TEMPLATES[tipoCaso];
     const checklistStatus = isRecord(row.checklist_status)
@@ -788,6 +1197,9 @@ export class WhatsAppWebhookService {
   }
 
   async obterDossieCliente(clienteId: string, escritorioId?: string): Promise<DossieClienteCompleto | null> {
+    // Se houver mídias pendentes de download ou áudios sem transcrição, dispara o processamento em background sem travar a leitura
+    void this.processarMidiasPendentesCliente(clienteId).catch(() => {});
+
     const cliRes = await this.pool.query(
       `SELECT
         c.id,
@@ -817,12 +1229,15 @@ export class WhatsAppWebhookService {
         m.enviada_em,
         m.conteudo_cifrado, m.conteudo_nonce, m.conteudo_tag,
         m.transcricao_cifrada, m.transcricao_nonce, m.transcricao_tag,
+        m.transcricao_estado,
         d.id AS doc_id,
         d.tipo_doc,
         d.media_kind,
         d.mime_type,
         d.estado AS doc_estado,
-        d.nome_original_cifrado, d.nome_original_nonce, d.nome_original_tag
+        d.caminho_local,
+        d.nome_original_cifrado, d.nome_original_nonce, d.nome_original_tag,
+        d.texto_ocr_cifrado, d.texto_ocr_nonce, d.texto_ocr_tag
        FROM operacional.mensagens m
        LEFT JOIN operacional.documentos d ON d.mensagem_id = m.id
        WHERE m.cliente_id = $1
@@ -836,6 +1251,8 @@ export class WhatsAppWebhookService {
         this.safeDecryptText(m.transcricao_cifrada, m.transcricao_nonce, m.transcricao_tag) ?? undefined;
       const nomeOriginal =
         this.safeDecryptText(m.nome_original_cifrado, m.nome_original_nonce, m.nome_original_tag) ?? undefined;
+      const resumoOcr =
+        this.safeDecryptText(m.texto_ocr_cifrado, m.texto_ocr_nonce, m.texto_ocr_tag) ?? undefined;
 
       let texto = '';
       if (rawJson) {
@@ -871,6 +1288,7 @@ export class WhatsAppWebhookService {
         enviadaEm: new Date(m.enviada_em).toISOString(),
         texto,
         ...(transcricao ? { transcricao } : {}),
+        ...(m.transcricao_estado ? { transcricaoEstado: String(m.transcricao_estado) } : {}),
         ...(m.doc_id
           ? {
               midia: {
@@ -881,11 +1299,13 @@ export class WhatsAppWebhookService {
                 nomeArquivo:
                   nomeOriginal ??
                   (normalizedTipo === 'image'
-                    ? 'Imagem enviada no WhatsApp.jpg'
+                    ? 'Imagem_WhatsApp.jpg'
                     : normalizedTipo === 'audio'
-                    ? 'Áudio de voz do cliente.ogg'
+                    ? 'Audio_Cliente.ogg'
                     : 'Documento_Anexo.pdf'),
-                estado: String(m.doc_estado)
+                estado: String(m.doc_estado),
+                caminhoLocal: m.caminho_local ? String(m.caminho_local) : null,
+                resumoOcr: resumoOcr ?? null
               }
             }
           : {})
@@ -896,7 +1316,6 @@ export class WhatsAppWebhookService {
     for (let i = 0; i < mensagens.length; i++) {
       const msg = mensagens[i]!;
       if ((msg.tipo === 'image' || msg.tipo === 'document') && !msg.texto) {
-        // Procura a próxima mensagem de texto enviada pelo cliente logo em seguida para contextualizar a imagem avulsa
         for (let j = i + 1; j < Math.min(i + 4, mensagens.length); j++) {
           const nextMsg = mensagens[j]!;
           if (nextMsg.tipo === 'text' && nextMsg.texto) {
@@ -918,8 +1337,123 @@ export class WhatsAppWebhookService {
 
     return {
       cliente,
+      pastaFisicaRelativa: `storage/clientes/${cliente.id}`,
       checklist,
       mensagens
+    };
+  }
+
+  /**
+   * Retorna os bytes reais do arquivo (áudio .ogg, imagem .jpg ou PDF) armazenado na pasta física do cliente.
+   */
+  async obterArquivoMidia(
+    documentoId: string,
+    escritorioId?: string
+  ): Promise<{ buffer: Buffer; mimeType: string; filename: string } | null> {
+    const res = await this.pool.query(
+      `SELECT
+        d.id,
+        d.cliente_id,
+        d.mime_type,
+        d.media_kind,
+        d.caminho_local,
+        d.nome_original_cifrado, d.nome_original_nonce, d.nome_original_tag
+       FROM operacional.documentos d
+       JOIN operacional.clientes c ON c.id = d.cliente_id
+       WHERE d.id = $1 AND ($2::uuid IS NULL OR c.escritorio_id = $2 OR c.escritorio_id IS NULL)
+       LIMIT 1`,
+      [documentoId, escritorioId ?? null]
+    );
+
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+
+    let localPath: string | null = row.caminho_local ?? null;
+    if (!localPath || !existsSync(localPath)) {
+      await this.processarMidiasPendentesCliente(String(row.cliente_id));
+      const recheck = await this.pool.query(
+        `SELECT caminho_local, nome_original_cifrado, nome_original_nonce, nome_original_tag
+         FROM operacional.documentos WHERE id = $1`,
+        [documentoId]
+      );
+      localPath = recheck.rows[0]?.caminho_local ?? null;
+    }
+
+    if (!localPath || !existsSync(localPath)) return null;
+
+    const buffer = readFileSync(localPath);
+    const mimeType = String(row.mime_type || 'application/octet-stream').split(';')[0]!.trim();
+    const filename =
+      this.safeDecryptText(row.nome_original_cifrado, row.nome_original_nonce, row.nome_original_tag) ??
+      `Arquivo_${documentoId.slice(0, 8)}`;
+
+    return { buffer, mimeType, filename };
+  }
+
+  /**
+   * Gera um pacote .ZIP contendo todos os arquivos reais da pasta do cliente + Resumo de Triagem.
+   */
+  async gerarZipPastaCliente(
+    clienteId: string,
+    escritorioId?: string
+  ): Promise<{ zipBuffer: Buffer; zipFilename: string } | null> {
+    const dossie = await this.obterDossieCliente(clienteId, escritorioId);
+    if (!dossie) return null;
+
+    const entries: ZipEntryInput[] = [];
+
+    const resumoTxt = [
+      `=============================================================`,
+      `PASTA DIGITAL DO CLIENTE - TRIAGEM WHATSAPP (GHFS JURÍDICO)`,
+      `=============================================================`,
+      `Cliente: ${dossie.cliente.nome}`,
+      `Telefone: ${dossie.cliente.telefone}`,
+      `Enquadramento / Área: ${dossie.cliente.tipoCaso}`,
+      `Status Documental: ${dossie.cliente.status} (${dossie.cliente.checklistRecebidos}/${dossie.cliente.checklistTotal} obrigatórios)`,
+      `Diretório Físico no Servidor: ${dossie.pastaFisicaRelativa}`,
+      ``,
+      `--- RESUMO CONSOLIDADO DOS FATOS (TEXTOS + ÁUDIOS TRANSCRITOS) ---`,
+      dossie.cliente.resumoContexto,
+      ``,
+      `--- CHECKLIST DE DOCUMENTOS ---`,
+      ...dossie.checklist.map(c => `[${c.recebido ? 'X' : ' '}] ${c.label} (${c.descricao})`),
+      ``,
+      `--- HISTÓRICO CRONOLÓGICO COMPLETO ---`,
+      ...dossie.mensagens.map((m, idx) => {
+        const dt = new Date(m.enviadaEm).toLocaleString('pt-BR');
+        if (m.tipo === 'audio') {
+          return `${idx + 1}. [${dt}] ÁUDIO (${m.midia?.nomeArquivo ?? 'audio.ogg'}): "${m.transcricao ?? 'Sem transcrição'}"`;
+        }
+        if (m.midia) {
+          const ocr = m.midia.resumoOcr ? ` | IA: ${m.midia.resumoOcr}` : '';
+          const exp = m.explicacaoContextual ? ` | Explicação do cliente: "${m.explicacaoContextual}"` : '';
+          return `${idx + 1}. [${dt}] ARQUIVO (${m.midia.nomeArquivo} - ${m.midia.tipoDoc})${ocr}${exp}`;
+        }
+        return `${idx + 1}. [${dt}] TEXTO: "${m.texto}"`;
+      })
+    ].join('\r\n');
+
+    entries.push({
+      filename: '00_Resumo_Dossie_Cliente.txt',
+      data: Buffer.from(resumoTxt, 'utf8')
+    });
+
+    for (const msg of dossie.mensagens) {
+      if (msg.midia?.id) {
+        const fileData = await this.obterArquivoMidia(msg.midia.id, escritorioId);
+        if (fileData) {
+          entries.push({
+            filename: fileData.filename,
+            data: fileData.buffer
+          });
+        }
+      }
+    }
+
+    const safeClientName = dossie.cliente.nome.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return {
+      zipBuffer: buildZipBuffer(entries),
+      zipFilename: `Pasta_Cliente_${safeClientName}.zip`
     };
   }
 
@@ -943,7 +1477,10 @@ export class WhatsAppWebhookService {
     );
     if (cur.rows.length === 0) return null;
 
-    const currentTipoCaso: TipoCasoJuridico = payload.tipoCaso ?? cur.rows[0].tipo_caso ?? 'ECOMMERCE_ML';
+    const currentTipoCaso: TipoCasoJuridico = payload.tipoCaso
+      ? normalizeTipoCaso(payload.tipoCaso)
+      : normalizeTipoCaso(cur.rows[0].tipo_caso);
+
     const currentChecklist: Record<string, boolean> = isRecord(cur.rows[0].checklist_status)
       ? { ...(cur.rows[0].checklist_status as Record<string, boolean>) }
       : {};
