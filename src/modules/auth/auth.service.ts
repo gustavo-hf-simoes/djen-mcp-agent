@@ -443,9 +443,9 @@ export class AuthService implements AuthServicePort {
                whatsapp_display_phone = COALESCE(escritorios.whatsapp_display_phone, EXCLUDED.whatsapp_display_phone)
          RETURNING id::text AS id`,
         [
-          process.env.WHATSAPP_PHONE_NUMBER_ID || '994468647087640',
+          process.env.WHATSAPP_PHONE_NUMBER_ID || '1461573947028881',
           process.env.WHATSAPP_WABA_ID || '2346185095786771',
-          process.env.WHATSAPP_DISPLAY_PHONE || '+1 555-168-9844'
+          process.env.WHATSAPP_DISPLAY_PHONE || '5543996034632'
         ]
       );
       const masterEscritorioId = masterRes.rows[0]?.id;
