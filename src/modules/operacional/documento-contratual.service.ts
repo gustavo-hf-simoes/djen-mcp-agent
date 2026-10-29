@@ -271,14 +271,14 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     </div>
 
     <div class="footer-stamp">
-      Documento integrado via GHFS Jurídico para ASO Advogados · OAB/PR 69.161 · Validade jurídica conforme MP 2.200-2/2001 e Lei 14.063/2020.
+      Documento integrado via GHFS Jurídico para ${nomeEscritorio} · OAB/${oabUf} ${oabNumero} · Validade jurídica conforme MP 2.200-2/2001 e Lei 14.063/2020.
     </div>
   </div>
 
   <!-- PÁGINA 2: DECLARAÇÃO DE HIPOSSUFICIÊNCIA & DECLARAÇÃO DE RESIDÊNCIA -->
   <div class="sheet page-break">
     <div class="header-logo">
-      <img src="${DEFAULT_ASO_LOGO_DATA_URL}" alt="ASO Advogados">
+      <img src="${logoEscritorio}" alt="${nomeEscritorio}">
     </div>
 
     <h1>DECLARAÇÃO DE HIPOSSUFICIÊNCIA</h1>
@@ -322,14 +322,14 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     </div>
 
     <div class="footer-stamp">
-      ASO Advogados · Londrina/PR · Relatório preparado para assinatura eletrônica (ZapSign / Clicksign / Gov.br).
+      ${nomeEscritorio} · ${cidade}/${uf} · Relatório preparado para assinatura eletrônica (ZapSign / Clicksign / Gov.br).
     </div>
   </div>
 
   <!-- PÁGINA 3: CONTRATO DE HONORÁRIOS DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS -->
   <div class="sheet page-break">
     <div class="header-logo">
-      <img src="${DEFAULT_ASO_LOGO_DATA_URL}" alt="ASO Advogados">
+      <img src="${logoEscritorio}" alt="${nomeEscritorio}">
     </div>
 
     <h1>CONTRATO DE HONORÁRIOS DE PRESTAÇÃO DE SERVIÇOS ADVOCATÍCIOS</h1>
@@ -339,10 +339,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     </p>
 
     <p>
-      <strong>CONTRATADO: ANDRÉ SANTOS DE OLIVEIRA</strong>, brasileiro, casado, advogado com registro profissional
-      na Ordem dos Advogados do Brasil sob nº <strong>OAB/PR 69.161</strong>, com escritório profissional situado na
-      Rua Pedro Rossato, nº 55, unidade 20, CEP 86.084-016, na cidade de Londrina/PR, e-mail:
-      <em>andreolicontato@gmail.com</em>, telefone: (44) 9 9850-7150, doravante denominado <strong>CONTRATADO</strong>;
+      <strong>CONTRATADO: ${advogadoTitular}</strong>, advogado(a) devidamente inscrito(a) na Ordem dos Advogados do Brasil sob nº <strong>OAB/${oabUf} ${oabNumero}</strong>, com escritório profissional situado no(a) ${enderecoProfissional}, e-mail: <em>${emailProfissional}</em>, telefone: ${telefoneProfissional}, representando <strong>${nomeEscritorio}</strong>, doravante denominado(a) <strong>CONTRATADO(A)</strong>;
     </p>
 
     <p>
@@ -411,7 +408,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
 
     <h2>6. DO FORO</h2>
     <p>
-      Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da comarca de Londrina/PR,
+      Para dirimir quaisquer controvérsias oriundas deste contrato, as partes elegem o foro da comarca de ${cidade}/${uf},
       com renúncia a qualquer outro, por mais privilegiado que seja.
     </p>
 
@@ -422,8 +419,8 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     <div style="display: flex; justify-content: space-between; margin-top: 50px; text-align: center;">
       <div style="width: 45%;">
         <div class="signature-line" style="width: 100%;"></div>
-        <strong>ANDRÉ SANTOS DE OLIVEIRA</strong><br>
-        OAB/PR 69.161 (Contratado)
+        <strong>${advogadoTitular}</strong><br>
+        OAB/${oabUf} ${oabNumero} (${nomeEscritorio})
       </div>
       <div style="width: 45%;">
         <div class="signature-line" style="width: 100%;"></div>
@@ -438,7 +435,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     </div>
 
     <div class="footer-stamp">
-      Contrato padrão ASO Advogados · Validade probatória eletrônica conforme MP 2.200-2/2001 e Lei 14.063/2020.
+      Contrato padrão ${nomeEscritorio} · Validade probatória eletrônica conforme MP 2.200-2/2001 e Lei 14.063/2020.
     </div>
   </div>
 

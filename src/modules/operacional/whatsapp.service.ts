@@ -1657,7 +1657,8 @@ export class WhatsAppWebhookService {
     });
 
     const safeClientName = dossie.cliente.nome.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const filename = `Kit_Contratual_ASO_${safeClientName}.html`;
+    const safeTenantSlug = (dadosEscritorio?.nomeEscritorio ?? 'Escritorio').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `Kit_Contratual_${safeTenantSlug}_${safeClientName}.html`;
     const caminhoFisico = join(clientFolder, filename);
 
     // Grava fisicamente na pasta do cliente para constar no arquivo e no download .ZIP

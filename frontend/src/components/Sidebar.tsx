@@ -157,7 +157,7 @@ export function Sidebar({
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [editingBrand, setEditingBrand] = useState(false)
-  const [officeName, setOfficeName] = useState(usuario.escritorio.nome || 'ASO Advogados')
+  const [officeName, setOfficeName] = useState(usuario.escritorio.nome || 'Meu Escritório')
   const [officeLogo, setOfficeLogo] = useState<string>(usuario.escritorio.logoUrl || DEFAULT_ASO_LOGO_DATA_URL)
   const [savingBrand, setSavingBrand] = useState(false)
   const [switchingTenant, setSwitchingTenant] = useState(false)
@@ -182,7 +182,7 @@ export function Sidebar({
   const isMaster = usuario.role === 'MASTER'
   const roleInfo = ROLE_BADGE[usuario.role] ?? { label: usuario.role, color: '#a1a1aa' }
 
-  const displayOfficeName = usuario.escritorio.nome || 'ASO Advogados'
+  const displayOfficeName = usuario.escritorio.nome || 'Meu Escritório'
   const displayOfficeLogo = usuario.escritorio.logoUrl || DEFAULT_ASO_LOGO_DATA_URL
 
   function handleOpenEditBrand() {
@@ -208,7 +208,7 @@ export function Sidebar({
     setSavingBrand(true)
     try {
       const res = await atualizarIdentidadeEscritorio({
-        nome: officeName.trim() || 'ASO Advogados',
+        nome: officeName.trim() || usuario.escritorio.nome || 'Meu Escritório',
         logoUrl: officeLogo || DEFAULT_ASO_LOGO_DATA_URL,
       })
       if (onUpdateUsuario) {
@@ -417,7 +417,7 @@ export function Sidebar({
                   className="text-[10px] underline text-left"
                   style={{ color: 'var(--color-ink-muted)' }}
                 >
-                  Usar Logo Vetor ASO Advogados
+                  Restaurar Logo Padrão
                 </button>
               </div>
             </div>
@@ -430,7 +430,7 @@ export function Sidebar({
                 type="text"
                 value={officeName}
                 onChange={e => setOfficeName(e.target.value)}
-                placeholder="Ex: ASO Advogados"
+                placeholder="Ex: Nome do Escritório"
                 className="w-full h-8 px-2.5 rounded-lg text-xs outline-none"
                 style={{
                   background: 'var(--color-surface-input)',

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { LockKey, EnvelopeSimple } from '@phosphor-icons/react'
+import { LockKey, EnvelopeSimple, Scales } from '@phosphor-icons/react'
 import { loginSaas, DjenError, type UsuarioSessao } from '../api/djen'
-import { DEFAULT_ASO_LOGO_DATA_URL } from './Sidebar'
 
 interface LoginScreenProps {
   onSuccess: (usuario: UsuarioSessao) => void
@@ -34,7 +33,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
   return (
     <div
-      className="min-h-dvh flex flex-col items-center justify-center p-6"
+      className="min-h-screen w-full flex items-center justify-center p-4 relative"
       style={{ background: 'var(--color-surface)' }}
     >
       <motion.div
@@ -53,17 +52,20 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           style={{ borderBottom: '1px solid var(--color-edge-subtle)' }}
         >
           <div
-            className="w-14 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-            style={{ background: '#211E4A', border: '1px solid var(--color-edge)' }}
+            className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
+            style={{
+              background: 'rgba(224, 159, 62, 0.12)',
+              border: '1px solid rgba(224, 159, 62, 0.30)',
+            }}
           >
-            <img src={DEFAULT_ASO_LOGO_DATA_URL} alt="ASO Advogados" className="w-full h-full object-contain" />
+            <Scales size={24} weight="fill" style={{ color: 'var(--color-accent)' }} />
           </div>
           <div>
             <h1 className="text-base font-bold tracking-tight" style={{ color: 'var(--color-ink)' }}>
-              ASO Advogados
+              GHFS Jurídico
             </h1>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-ink-faint)' }}>
-              Controladoria & Triagem Inteligente · Acesse sua conta
+              Plataforma de Inteligência & Controladoria SaaS · Acesse sua conta
             </p>
           </div>
         </div>
@@ -73,8 +75,8 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             <div
               className="p-3 rounded-xl text-xs font-medium"
               style={{
-                background: 'rgba(239,68,68,0.1)',
-                border: '1px solid rgba(239,68,68,0.25)',
+                background: 'rgba(248,113,113,0.1)',
+                border: '1px solid rgba(248,113,113,0.25)',
                 color: '#f87171',
               }}
             >
@@ -83,27 +85,25 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           )}
 
           <div className="space-y-1.5">
-            <label
-              className="text-[11px] font-semibold uppercase tracking-widest"
-              style={{ color: 'var(--color-ink-faint)' }}
-            >
-              E-mail
+            <label className="text-xs font-medium" style={{ color: 'var(--color-ink-muted)' }}>
+              E-mail do Advogado
             </label>
             <div className="relative">
               <EnvelopeSimple
-                size={15}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2"
                 style={{ color: 'var(--color-ink-faint)' }}
               />
               <input
                 type="email"
                 required
-                placeholder="seu@email.com.br"
+                autoComplete="email"
+                placeholder="advogado@escritorio.adv.br"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all placeholder:opacity-40"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl text-sm transition-all focus:outline-none"
                 style={{
-                  background: 'var(--color-surface-input)',
+                  background: 'var(--color-surface-overlay)',
                   border: '1px solid var(--color-edge)',
                   color: 'var(--color-ink)',
                 }}
@@ -112,27 +112,25 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           </div>
 
           <div className="space-y-1.5">
-            <label
-              className="text-[11px] font-semibold uppercase tracking-widest"
-              style={{ color: 'var(--color-ink-faint)' }}
-            >
-              Senha
+            <label className="text-xs font-medium" style={{ color: 'var(--color-ink-muted)' }}>
+              Senha de Acesso
             </label>
             <div className="relative">
               <LockKey
-                size={15}
-                className="absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+                size={16}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2"
                 style={{ color: 'var(--color-ink-faint)' }}
               />
               <input
                 type="password"
                 required
+                autoComplete="current-password"
                 placeholder="••••••••"
                 value={senha}
                 onChange={e => setSenha(e.target.value)}
-                className="w-full h-10 pl-9 pr-3 rounded-lg text-sm outline-none transition-all placeholder:opacity-40"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl text-sm transition-all focus:outline-none"
                 style={{
-                  background: 'var(--color-surface-input)',
+                  background: 'var(--color-surface-overlay)',
                   border: '1px solid var(--color-edge)',
                   color: 'var(--color-ink)',
                 }}
@@ -143,15 +141,25 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full h-11 rounded-xl text-sm font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
+            className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-2 mt-2"
             style={{
               background: 'var(--color-accent)',
               color: 'var(--color-accent-on)',
-              boxShadow: '0 2px 14px rgba(224,159,62,0.25)',
             }}
           >
-            {loading ? 'Autenticando...' : 'Entrar'}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Autenticando...
+              </span>
+            ) : (
+              'Entrar no Sistema'
+            )}
           </button>
+
+          <p className="text-[11px] text-center pt-2" style={{ color: 'var(--color-ink-faint)' }}>
+            Ambiente seguro · Criptografia AES-256-GCM & Zero-Trust
+          </p>
         </form>
       </motion.div>
     </div>
