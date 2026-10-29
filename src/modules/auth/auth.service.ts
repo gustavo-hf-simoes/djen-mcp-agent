@@ -265,6 +265,7 @@ export class AuthService implements AuthServicePort {
 
       await client.query(`ALTER TABLE escritorios ADD COLUMN IF NOT EXISTS logo_url TEXT`);
 
+      // 1. Escritório Piloto ASO Advogados (Dr. André Santos de Oliveira)
       const escritorioRes = await client.query<{ id: string }>(
         `INSERT INTO escritorios (nome, slug, plano, logo_url, ativo)
          VALUES ('ASO Advogados', 'andre-oliveira', 'PILOTO', $1, TRUE)
@@ -274,7 +275,31 @@ export class AuthService implements AuthServicePort {
          RETURNING id::text AS id`,
         [DEFAULT_ASO_LOGO_DATA_URL]
       );
-      const escritorioId = escritorioRes.rows[0]?.id;
+      const asoEscritorioId = escritorioRes.rows[0]?.id;
+
+      // 2. Escritório Master (Gustavo Simões - Sede / Plataforma SaaS)
+      const masterRes = await client.query<{ id: string }>(
+        `INSERT INTO escritorios (
+           nome, slug, plano, ativo,
+           whatsapp_phone_number_id, whatsapp_waba_id, whatsapp_display_phone,
+           whatsapp_status_conexao
+         ) VALUES (
+           'GHFS Tecnologia Jurídica (Master)', 'ghfs-master', 'MASTER', TRUE,
+           $1, $2, $3, 'CONECTADO'
+         )
+         ON CONFLICT (slug) DO UPDATE
+           SET plano = 'MASTER',
+               whatsapp_phone_number_id = COALESCE(escritorios.whatsapp_phone_number_id, EXCLUDED.whatsapp_phone_number_id),
+               whatsapp_waba_id = COALESCE(escritorios.whatsapp_waba_id, EXCLUDED.whatsapp_waba_id),
+               whatsapp_display_phone = COALESCE(escritorios.whatsapp_display_phone, EXCLUDED.whatsapp_display_phone)
+         RETURNING id::text AS id`,
+        [
+          process.env.WHATSAPP_PHONE_NUMBER_ID || '994468647087640',
+          process.env.WHATSAPP_WABA_ID || '2346185095786771',
+          process.env.WHATSAPP_DISPLAY_PHONE || '+1 555-168-9844'
+        ]
+      );
+      const masterEscritorioId = masterRes.rows[0]?.id;
 
       const advogadoRes = await client.query<{ id: string }>(
         `SELECT id::text AS id FROM advogados WHERE numero_oab = '69161' AND uf_oab = 'PR' LIMIT 1`
@@ -286,20 +311,20 @@ export class AuthService implements AuthServicePort {
           `INSERT INTO advogados (nome, numero_oab, uf_oab, socio_principal, escritorio_id)
            VALUES ('André Santos de Oliveira', '69161', 'PR', TRUE, $1::uuid)
            RETURNING id::text AS id`,
-          [escritorioId]
+          [asoEscritorioId]
         );
         advogadoId = novoAdv.rows[0]?.id ?? null;
-      } else if (escritorioId) {
+      } else if (asoEscritorioId) {
         await client.query(
           `UPDATE advogados SET escritorio_id = $1::uuid WHERE id = $2::uuid AND escritorio_id IS NULL`,
-          [escritorioId, advogadoId]
+          [asoEscritorioId, advogadoId]
         );
       }
 
-      if (escritorioId) {
+      if (asoEscritorioId) {
         await client.query(
           `UPDATE processos SET escritorio_id = $1::uuid WHERE escritorio_id IS NULL`,
-          [escritorioId]
+          [asoEscritorioId]
         );
       }
 
@@ -308,24 +333,32 @@ export class AuthService implements AuthServicePort {
         email: string;
         senha: string;
         role: UserRole;
+        escritorioId: string | undefined;
+        advogadoId: string | null;
       }> = [
         {
           nome: 'Gustavo Simões (Proprietário Master)',
           email: 'gustavo@ghfs.adv.br',
           senha: process.env.SEED_MASTER_PASSWORD || 'Master@2026',
-          role: 'MASTER'
+          role: 'MASTER',
+          escritorioId: masterEscritorioId,
+          advogadoId: null
         },
         {
           nome: 'André Santos de Oliveira',
           email: 'andre@oliveira.adv.br',
           senha: process.env.SEED_ANDRE_PASSWORD || 'Andre@2026',
-          role: 'ADVOGADO'
+          role: 'ADVOGADO',
+          escritorioId: asoEscritorioId,
+          advogadoId
         },
         {
           nome: 'Alessandro (Dev Front-end)',
           email: 'alessandro@ghfs.adv.br',
           senha: process.env.SEED_ALESSANDRO_PASSWORD || 'Alessandro@2026',
-          role: 'ADMIN_DEV'
+          role: 'ADMIN_DEV',
+          escritorioId: masterEscritorioId,
+          advogadoId: null
         }
       ];
 
@@ -338,7 +371,15 @@ export class AuthService implements AuthServicePort {
           await client.query(
             `INSERT INTO usuarios (escritorio_id, advogado_id, nome, email, senha_hash, role, ativo)
              VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, TRUE)`,
-            [escritorioId, advogadoId, u.nome, u.email, hashPassword(u.senha), u.role]
+            [u.escritorioId, u.advogadoId, u.nome, u.email, hashPassword(u.senha), u.role]
+          );
+        } else if (u.escritorioId) {
+          await client.query(
+            `UPDATE usuarios
+             SET escritorio_id = $1::uuid,
+                 advogado_id = $2::uuid
+             WHERE LOWER(email) = LOWER($3)`,
+            [u.escritorioId, u.advogadoId, u.email]
           );
         }
       }

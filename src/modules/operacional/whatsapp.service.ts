@@ -670,6 +670,50 @@ export class WhatsAppWebhookService {
   }
 
   /**
+   * Resolve o token de acesso da Meta de forma multi-tenant dinâmica (BYON):
+   * 1. Token criptografado armazenado no escritório do cliente
+   * 2. Fallback para token do Escritório Master da plataforma
+   * 3. Fallback final para variável de ambiente .env
+   */
+  async obterTokenAcessoTenant(escritorioId?: string | null): Promise<string | null> {
+    if (escritorioId) {
+      const res = await this.pool.query(
+        `SELECT whatsapp_access_token_cifrado, whatsapp_access_token_nonce, whatsapp_access_token_tag
+         FROM escritorios
+         WHERE id = $1`,
+        [escritorioId]
+      );
+      if (res.rows.length > 0 && res.rows[0].whatsapp_access_token_cifrado) {
+        const row = res.rows[0];
+        const dec = this.safeDecryptText(
+          row.whatsapp_access_token_cifrado,
+          row.whatsapp_access_token_nonce,
+          row.whatsapp_access_token_tag
+        );
+        if (dec && dec.trim()) return dec.trim();
+      }
+    }
+
+    const masterRes = await this.pool.query(
+      `SELECT whatsapp_access_token_cifrado, whatsapp_access_token_nonce, whatsapp_access_token_tag
+       FROM escritorios
+       WHERE plano = 'MASTER' OR slug = 'ghfs-master'
+       LIMIT 1`
+    );
+    if (masterRes.rows.length > 0 && masterRes.rows[0].whatsapp_access_token_cifrado) {
+      const row = masterRes.rows[0];
+      const dec = this.safeDecryptText(
+        row.whatsapp_access_token_cifrado,
+        row.whatsapp_access_token_nonce,
+        row.whatsapp_access_token_tag
+      );
+      if (dec && dec.trim()) return dec.trim();
+    }
+
+    return process.env.WHATSAPP_ACCESS_TOKEN?.trim() || null;
+  }
+
+  /**
    * Baixa os arquivos reais da Graph API da Meta para storage/clientes/{clienteId}/,
    * transcreve os áudios em português usando Gemini 3.8 Flash e analisa imagens/documentos.
    */
@@ -681,8 +725,17 @@ export class WhatsAppWebhookService {
 
     try {
       const { encryptionKey } = this.ensureKeys();
-      const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+
+      // Obtém o escritório do cliente para resolver o token BYON correspondente
+      const clienteRes = await this.pool.query<{ escritorio_id: string | null }>(
+        `SELECT escritorio_id FROM operacional.clientes WHERE id = $1`,
+        [clienteId]
+      );
+      const clienteEscritorioId = clienteRes.rows[0]?.escritorio_id ?? null;
+
+      const accessToken = await this.obterTokenAcessoTenant(clienteEscritorioId);
       if (!accessToken) {
+        console.warn(`[WhatsApp Media] Nenhum token de acesso encontrado para o cliente ${clienteId} ou tenant.`);
         return { processados: 0 };
       }
 
@@ -1792,17 +1845,22 @@ export class WhatsAppWebhookService {
 
   async obterConfiguracaoTenant(escritorioId?: string) {
     const res = await this.pool.query(
-      `SELECT id, nome, whatsapp_waba_id, whatsapp_phone_number_id, whatsapp_display_phone
+      `SELECT id, nome, whatsapp_waba_id, whatsapp_phone_number_id, whatsapp_display_phone,
+              whatsapp_access_token_cifrado IS NOT NULL AS has_token,
+              whatsapp_status_conexao,
+              whatsapp_ultimo_sync_em
        FROM escritorios
        WHERE ($1::uuid IS NULL OR id = $1)
-       ORDER BY created_at ASC
+       ORDER BY CASE WHEN plano = 'MASTER' THEN 0 ELSE 1 END, created_at ASC
        LIMIT 1`,
       [escritorioId ?? null]
     );
     const tenant = res.rows[0];
     const statsRes = await this.pool.query(
       `SELECT COUNT(*)::int AS total, MAX(recebido_em) AS ultimo_em
-       FROM operacional.webhook_eventos`
+       FROM operacional.webhook_eventos
+       WHERE ($1::uuid IS NULL OR escritorio_id = $1)`,
+      [tenant?.id ?? null]
     );
     const stats = statsRes.rows[0];
     return {
@@ -1811,7 +1869,8 @@ export class WhatsAppWebhookService {
       whatsappWabaId: tenant?.whatsapp_waba_id ?? process.env.WHATSAPP_WABA_ID ?? '',
       whatsappPhoneNumberId: tenant?.whatsapp_phone_number_id ?? '',
       whatsappDisplayPhone: tenant?.whatsapp_display_phone ?? '',
-      tokenConfiguradoNoServidor: Boolean(process.env.WHATSAPP_ACCESS_TOKEN),
+      tokenConfiguradoNoServidor: Boolean(tenant?.has_token || process.env.WHATSAPP_ACCESS_TOKEN),
+      statusConexao: tenant?.whatsapp_status_conexao ?? (tenant?.has_token ? 'CONECTADO' : 'DESCONECTADO'),
       totalEventosRecebidos: Number(stats?.total ?? 0),
       ultimoWebhookEm: stats?.ultimo_em ? new Date(stats.ultimo_em).toISOString() : null
     };
@@ -1833,16 +1892,36 @@ export class WhatsAppWebhookService {
     const cleanId = payload.whatsappPhoneNumberId.trim() || null;
     const cleanPhone = payload.whatsappDisplayPhone?.trim() || null;
 
-    await this.pool.query(
-      `UPDATE escritorios
-       SET whatsapp_waba_id = $2,
-           whatsapp_phone_number_id = $3,
-           whatsapp_display_phone = $4
-       WHERE id = $1`,
-      [target.escritorioId, cleanWabaId, cleanId, cleanPhone]
-    );
+    if (payload.accessToken && payload.accessToken.trim()) {
+      const { encryptionKey } = this.ensureKeys();
+      const enc = encryptValue(payload.accessToken.trim(), encryptionKey);
+      await this.pool.query(
+        `UPDATE escritorios
+         SET whatsapp_waba_id = $2,
+             whatsapp_phone_number_id = $3,
+             whatsapp_display_phone = $4,
+             whatsapp_access_token_cifrado = $5,
+             whatsapp_access_token_nonce = $6,
+             whatsapp_access_token_tag = $7,
+             whatsapp_status_conexao = 'CONECTADO',
+             whatsapp_ultimo_sync_em = clock_timestamp(),
+             updated_at = clock_timestamp()
+         WHERE id = $1`,
+        [target.escritorioId, cleanWabaId, cleanId, cleanPhone, enc.ciphertext, enc.nonce, enc.tag]
+      );
+    } else {
+      await this.pool.query(
+        `UPDATE escritorios
+         SET whatsapp_waba_id = $2,
+             whatsapp_phone_number_id = $3,
+             whatsapp_display_phone = $4,
+             updated_at = clock_timestamp()
+         WHERE id = $1`,
+        [target.escritorioId, cleanWabaId, cleanId, cleanPhone]
+      );
+    }
 
-    const tokenToUse = payload.accessToken?.trim() || process.env.WHATSAPP_ACCESS_TOKEN;
+    const tokenToUse = payload.accessToken?.trim() || (await this.obterTokenAcessoTenant(target.escritorioId));
     let metaSubscribed = false;
     if (cleanWabaId && tokenToUse) {
       try {
