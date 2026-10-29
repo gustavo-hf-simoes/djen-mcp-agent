@@ -845,16 +845,24 @@ export function OperacionalWhatsappPanel() {
                             }}
                             src={urlMidiaOperacional(msg.midia.id, false)}
                             onTimeUpdate={e => {
-                              const target = e.currentTarget
+                              const midiaId = msg.midia?.id
+                              if (!midiaId) return
+                              const el = e.currentTarget
+                              const ct = el?.currentTime ?? 0
+                              const dur = el?.duration || 1
+                              const pct = Math.min(100, Math.max(0, (ct / dur) * 100))
                               setAudioProgress(prev => ({
                                 ...prev,
-                                [msg.midia!.id]: (target.currentTime / (target.duration || 1)) * 100,
+                                [midiaId]: pct,
                               }))
                             }}
                             onLoadedMetadata={e => {
+                              const midiaId = msg.midia?.id
+                              if (!midiaId) return
+                              const dur = e.currentTarget?.duration || 0
                               setAudioDurations(prev => ({
                                 ...prev,
-                                [msg.midia!.id]: e.currentTarget.duration,
+                                [midiaId]: dur,
                               }))
                             }}
                             onEnded={() => setPlayingAudioId(null)}
