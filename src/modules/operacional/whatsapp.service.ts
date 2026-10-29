@@ -1872,7 +1872,7 @@ export class WhatsAppWebhookService {
 
   async obterConfiguracaoTenant(escritorioId?: string) {
     const res = await this.pool.query(
-      `SELECT id, nome, whatsapp_waba_id, whatsapp_phone_number_id, whatsapp_display_phone,
+      `SELECT id, nome, slug, plano, whatsapp_waba_id, whatsapp_phone_number_id, whatsapp_display_phone,
               whatsapp_access_token_cifrado IS NOT NULL AS has_token,
               whatsapp_status_conexao,
               whatsapp_ultimo_sync_em
@@ -1893,10 +1893,10 @@ export class WhatsAppWebhookService {
     return {
       escritorioId: tenant?.id ?? null,
       escritorioNome: tenant?.nome ?? 'Escritório Piloto',
-      whatsappWabaId: tenant?.whatsapp_waba_id ?? process.env.WHATSAPP_WABA_ID ?? '',
+      whatsappWabaId: tenant?.whatsapp_waba_id ?? (tenant?.plano === 'MASTER' ? process.env.WHATSAPP_WABA_ID ?? '' : ''),
       whatsappPhoneNumberId: tenant?.whatsapp_phone_number_id ?? '',
       whatsappDisplayPhone: tenant?.whatsapp_display_phone ?? '',
-      tokenConfiguradoNoServidor: Boolean(tenant?.has_token || process.env.WHATSAPP_ACCESS_TOKEN),
+      tokenConfiguradoNoServidor: Boolean(tenant?.has_token || (tenant?.plano === 'MASTER' && process.env.WHATSAPP_ACCESS_TOKEN)),
       statusConexao: tenant?.whatsapp_status_conexao ?? (tenant?.has_token ? 'CONECTADO' : 'DESCONECTADO'),
       totalEventosRecebidos: Number(stats?.total ?? 0),
       ultimoWebhookEm: stats?.ultimo_em ? new Date(stats.ultimo_em).toISOString() : null
@@ -1916,7 +1916,7 @@ export class WhatsAppWebhookService {
     if (!target.escritorioId) throw new Error('ESCRITORIO_NAO_ENCONTRADO');
 
     const cleanWabaId = payload.whatsappWabaId?.trim() || target.whatsappWabaId || null;
-    const cleanId = payload.whatsappPhoneNumberId.trim() || null;
+    const cleanId = payload.whatsappPhoneNumberId?.trim() || target.whatsappPhoneNumberId || null;
     const cleanPhone = payload.whatsappDisplayPhone?.trim() || null;
 
     if (payload.accessToken && payload.accessToken.trim()) {

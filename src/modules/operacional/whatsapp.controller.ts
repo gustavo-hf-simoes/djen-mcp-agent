@@ -73,6 +73,23 @@ export class WhatsAppWebhookController {
     private readonly config: WhatsAppWebhookConfig
   ) {}
 
+  private extrairEscritorioId(req: Request): string | undefined {
+    if (req.authUser?.escritorioId) {
+      return req.authUser.escritorioId;
+    }
+    if (req.authUser?.role === 'MASTER') {
+      const headerTenant = req.headers['x-tenant-id'];
+      if (typeof headerTenant === 'string' && headerTenant.trim()) {
+        return headerTenant.trim();
+      }
+      const queryTenant = req.query.escritorioId;
+      if (typeof queryTenant === 'string' && queryTenant.trim()) {
+        return queryTenant.trim();
+      }
+    }
+    return undefined;
+  }
+
   verificar(req: Request, res: Response) {
     if (!this.config.verifyToken) {
       return res.status(503).send('WhatsApp webhook não configurado.');

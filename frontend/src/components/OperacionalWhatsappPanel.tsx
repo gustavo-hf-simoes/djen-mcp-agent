@@ -126,6 +126,7 @@ export function OperacionalWhatsappPanel() {
   const [wabaIdInput, setWabaIdInput] = useState('')
   const [phoneIdInput, setPhoneIdInput] = useState('')
   const [displayPhoneInput, setDisplayPhoneInput] = useState('')
+  const [accessTokenInput, setAccessTokenInput] = useState('')
   const [savingConfig, setSavingConfig] = useState(false)
   const [configSavedMsg, setConfigSavedMsg] = useState<string | null>(null)
 
@@ -336,8 +337,10 @@ export function OperacionalWhatsappPanel() {
         whatsappWabaId: wabaIdInput,
         whatsappPhoneNumberId: phoneIdInput,
         whatsappDisplayPhone: displayPhoneInput,
+        ...(accessTokenInput.trim() ? { accessToken: accessTokenInput.trim() } : {}),
       })
       setConfig(atualizado)
+      setAccessTokenInput('')
       setConfigSavedMsg(
         atualizado.metaSubscribed
           ? 'Vínculo salvo e conta WABA inscrita automaticamente na Graph API da Meta (subscribed_apps OK)!'
@@ -649,14 +652,23 @@ export function OperacionalWhatsappPanel() {
                 <p className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>
                   Passo 3 · Ativação do Escritório ({config?.escritorioNome ?? 'Escritório Piloto'})
                 </p>
-                {config?.tokenConfiguradoNoServidor && (
-                  <span
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded"
-                    style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
-                  >
-                    Token .env Ativo
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {config?.statusConexao === 'CONECTADO' || config?.tokenConfiguradoNoServidor ? (
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1"
+                      style={{ background: 'rgba(74,222,128,0.12)', color: '#4ade80' }}
+                    >
+                      ● Conectado
+                    </span>
+                  ) : (
+                    <span
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded flex items-center gap-1"
+                      style={{ background: 'rgba(224,159,62,0.15)', color: 'var(--color-accent)' }}
+                    >
+                      ○ Aguardando Conexão
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -714,6 +726,30 @@ export function OperacionalWhatsappPanel() {
                       }}
                     />
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium flex items-center justify-between" style={{ color: 'var(--color-ink-faint)' }}>
+                    <span>Token de Acesso Permanente (System User Token)</span>
+                    {config?.tokenConfiguradoNoServidor && (
+                      <span className="text-[10px] text-emerald-400 font-semibold">Token Criptografado Ativo</span>
+                    )}
+                  </label>
+                  <input
+                    type="password"
+                    placeholder={config?.tokenConfiguradoNoServidor ? '•••••••••••••••••••••••• (Salvo e Criptografado)' : 'Cole o Token da Meta Cloud API (EAAG...)'}
+                    value={accessTokenInput}
+                    onChange={e => setAccessTokenInput(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg text-xs font-mono"
+                    style={{
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-edge)',
+                      color: 'var(--color-ink)',
+                    }}
+                  />
+                  <p className="text-[10px] leading-tight" style={{ color: 'var(--color-ink-faint)' }}>
+                    Gerado no Gerenciador de Negócios da Meta (com permissões whatsapp_business_messaging). Armazenado com criptografia militar AES-256-GCM.
+                  </p>
                 </div>
               </div>
 

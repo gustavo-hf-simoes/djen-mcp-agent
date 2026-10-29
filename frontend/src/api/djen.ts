@@ -485,6 +485,7 @@ export interface ConfiguracaoWhatsappTenant {
   whatsappPhoneNumberId: string
   whatsappDisplayPhone: string
   tokenConfiguradoNoServidor?: boolean
+  statusConexao?: 'CONECTADO' | 'DESCONECTADO'
   metaSubscribed?: boolean
   verifyToken: string
   hmacAtivo: boolean
