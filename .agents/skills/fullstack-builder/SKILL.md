@@ -42,3 +42,13 @@ Após qualquer alteração no backend, execute:
 ### Validação Obrigatória no Frontend
 Após qualquer alteração em `D:\Projetos\consultas-andre`, execute nesse diretório:
 1. `npm run build` (que valida `tsc && vite build`).
+
+---
+
+## 3. Filtro Obrigatório de UX Jurídica (O Ponto de Vista do Advogado)
+
+Antes de submeter ou finalizar qualquer alteração de interface no Frontend, o agente DEVE auditar a tela contra os seguintes princípios:
+1. **TI no Background:** Nenhuma métrica de vaidade técnica (tokens de LLM, total de áudios processados, eventos de webhook recebidos) deve aparecer no fluxo de trabalho diário. Toda informação deve responder a: *"Qual dor concreta do advogado isso resolve?"*.
+2. **Setup Técnico Isolado:** Configurações de API, webhooks e credenciais pertencem a Modais ou Drawers dedicados. Nunca polua o topo da tela de trabalho diário com formulários de implantação técnica.
+3. **Ergonomia e Redução de Sobrecarga:** Nunca empilhe múltiplos formulários e listas longas na mesma coluna vertical. Utilize abas temáticas (`Tabs`) para organizar o trabalho (ex: `Cadastro Civil`, `Checklist de Provas`, `Ações & Minutas`).
+4. **Fidelidade ao Padrão Alessandro:** Manter a paleta *Chumbo + Âmbar* (`#161618`, `#1e1e21`, `#252528`, `#e09f3e`), cantos arredondados (`rounded-2xl`), badges semânticos e tipografia limpa (*Outfit* e *JetBrains Mono*).

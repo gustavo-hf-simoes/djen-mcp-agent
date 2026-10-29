@@ -28,13 +28,21 @@ Este produto opera em formato **Monorepo** para contexto atômico dos agentes:
 
 ## 4. Diretrizes Obrigatórias de Usabilidade (UX Jurídica & Padrão de Mercado)
 A usabilidade intuitiva é o maior diferencial comercial do SaaS:
-1. **Linguagem do Advogado (Zero Jargão Técnico de TI):** Nunca exiba termos internos de banco/infraestrutura na UI (como `SHA-256`, `UUID`, `JSONB`). Priorize sempre **Nome do Cliente / Partes**, **Número do Processo Formatado (`NNNNNNN-DD.AAAA.J.TR.OOOO`)** e **Prazo Fatal**.
-2. **Navegação Escalável (Sidebar com Busca):** O sistema utiliza menu lateral recolhível (`Sidebar`) com filtro de busca instantânea para comportar o crescimento de módulos (Controladoria, Operacional WhatsApp, Jurisprudência, Base de Conhecimento, Financeiro e Governança Master).
-3. **Ergonomia de Leitura e Paginação:**
+1. **Regra de Ouro — TI no Background, Advocacia no Foreground:**
+   - Toda tela, card, métrica ou botão deve responder à pergunta: *"Qual dor concreta do advogado isso resolve e que decisão prática ele toma ao ver isso?"*.
+   - Métricas de infraestrutura ou inteligência artificial (ex: "X áudios transcritos", "Tokens consumidos", "Webhooks processados", "Payload criptografado") NUNCA devem poluir o fluxo de trabalho do advogado. Elas pertencem a logs de auditoria ou ao painel exclusivo do MASTER.
+   - Telas operacionais e de controladoria devem refletir a **esteira de conversão e urgência processual do escritório** (ex: *Novos Contatos*, *Aguardando Documentos*, *Prontos para Inicial*, *Sem Retorno +48h*).
+2. **Linguagem do Advogado (Zero Jargão Técnico de TI):** Nunca exiba termos internos de banco/infraestrutura na UI (como `SHA-256`, `UUID`, `JSONB`, `WABA ID`, `x-hub-signature`). Priorize sempre **Nome do Cliente / Partes**, **Número do Processo Formatado (`NNNNNNN-DD.AAAA.J.TR.OOOO`)** e **Prazo Fatal**.
+3. **Setup Técnico sem Intrusão Operacional:**
+   - Telas de parametrização e credenciais (ex: WhatsApp Meta Cloud API, tokens) NUNCA devem viver no topo da tela de trabalho diário. Devem residir em **Modais Centrais** ou **Drawers Dedicados**, abertos apenas sob demanda via botão sutil no cabeçalho.
+   - Quando um módulo estiver sem dados ou desconectado, exiba um **Empty State de Boas-Vindas acolhedor** (`EmptyState.tsx`), com linguagem humana e um único botão amigável (ex: *"Conectar WhatsApp Oficial do Escritório"*), sem expor formulários de desenvolvimento.
+4. **Ergonomia, Abas e Redução de Sobrecarga Cognitiva:**
+   - Evite empilhar múltiplos formulários ou listas infinitas na mesma coluna. Utilize **Abas Temáticas Focadas** (ex: `[📋 Qualificação Civil]`, `[📑 Checklist de Provas]`, `[⚡ Ações & Minutas]`).
    - Sempre decodificar entidades HTML (`&iacute;`, `&ccedil;`, etc.) para UTF-8 limpo tanto em visualizações recolhidas quanto expandidas.
    - Em listagens longas, disponibilizar controles de paginação **no topo e no rodapé** para evitar rolagem excessiva.
    - Painéis de filtro laterais devem ter scroll independente (`overscroll-contain`) sem arrastar a página principal.
-   - Manter fidelidade absoluta à paleta escura e badges semânticos criados pelo Alessandro (`Chumbo + Âmbar`).
+   - Manter fidelidade absoluta à paleta escura e badges semânticos criados pelo Alessandro (`Chumbo + Âmbar`: `#161618`, `#1e1e21`, `#252528`, `#e09f3e`).
+5. **Navegação Escalável (Sidebar com Busca):** O sistema utiliza menu lateral recolhível (`Sidebar`) com filtro de busca instantânea para comportar o crescimento de módulos (Controladoria, Operacional WhatsApp, Jurisprudência, Base de Conhecimento, Financeiro e Governança Master).
 
 ## 5. Fluxo de Desenvolvimento Agêntico (Spec-Driven & Token-Aware)
 - Antes de escrever código complexo, utilize a skill `spec-architect` para transformar ideias brutas (áudios do Gustavo ou documentos do André) em especificações técnicas executáveis (`docs/specs/`).
