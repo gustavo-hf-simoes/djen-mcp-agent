@@ -36,6 +36,15 @@ export interface UsuarioRow {
   created_at: string;
 }
 
+export interface EscritorioResumoDto {
+  id: string;
+  nome: string;
+  slug: string;
+  plano: string;
+  logoUrl?: string | null;
+  whatsappDisplayPhone?: string | null;
+}
+
 export interface UsuarioPublicoDto {
   id: string;
   nome: string;
@@ -72,6 +81,10 @@ export interface AuthServicePort {
       totalUsuarios: number;
     }>;
   }>;
+  trocarEscritorio?(
+    usuarioId: string,
+    escritorioId: string
+  ): Promise<{ token: string; usuario: UsuarioPublicoDto }>;
   atualizarEscritorio?(
     escritorioId: string,
     dados: { nome?: string; logoUrl?: string | null }
@@ -81,7 +94,7 @@ export interface AuthServicePort {
 
 export class AuthUnauthorizedError extends Error {}
 
-function mapearUsuarioPublico(row: UsuarioRow): UsuarioPublicoDto {
+function mapearUsuarioPublico(row: UsuarioRow, escritoriosDisponiveis?: EscritorioResumoDto[]): UsuarioPublicoDto {
   return {
     id: row.id,
     nome: row.nome,
@@ -99,12 +112,145 @@ function mapearUsuarioPublico(row: UsuarioRow): UsuarioPublicoDto {
       numero: row.numero_oab ?? '69161',
       uf: row.uf_oab ?? 'PR'
     },
-    ultimoLoginEm: row.ultimo_login_em
+    ultimoLoginEm: row.ultimo_login_em,
+    ...(escritoriosDisponiveis ? { escritoriosDisponiveis } : {})
   };
 }
 
 export class AuthService implements AuthServicePort {
   constructor(private readonly pool: Pool) {}
+
+  private async listarEscritoriosDisponiveis(usuarioId: string, role: UserRole): Promise<EscritorioResumoDto[]> {
+    if (role === 'MASTER' || role === 'ADMIN_DEV') {
+      const res = await this.pool.query<{
+        id: string;
+        nome: string;
+        slug: string;
+        plano: string;
+        logo_url: string | null;
+        whatsapp_display_phone: string | null;
+      }>(
+        `SELECT id::text AS id, nome, slug, plano, logo_url, whatsapp_display_phone
+         FROM escritorios
+         WHERE ativo = TRUE
+         ORDER BY CASE WHEN slug = 'ghfs-master' THEN 0 ELSE 1 END, nome ASC`
+      );
+      return res.rows.map(r => ({
+        id: r.id,
+        nome: r.nome,
+        slug: r.slug,
+        plano: r.plano,
+        logoUrl: r.logo_url ?? (r.slug === 'andre-oliveira' ? DEFAULT_ASO_LOGO_DATA_URL : null),
+        whatsappDisplayPhone: r.whatsapp_display_phone
+      }));
+    }
+
+    const res = await this.pool.query<{
+      id: string;
+      nome: string;
+      slug: string;
+      plano: string;
+      logo_url: string | null;
+      whatsapp_display_phone: string | null;
+    }>(
+      `SELECT DISTINCT e.id::text AS id, e.nome, e.slug, e.plano, e.logo_url, e.whatsapp_display_phone
+       FROM escritorios e
+       LEFT JOIN usuarios_escritorios ue ON ue.escritorio_id = e.id AND ue.usuario_id = $1::uuid
+       LEFT JOIN usuarios u ON u.escritorio_id = e.id AND u.id = $1::uuid
+       WHERE e.ativo = TRUE AND (ue.escritorio_id IS NOT NULL OR u.id IS NOT NULL)
+       ORDER BY e.nome ASC`,
+      [usuarioId]
+    );
+    return res.rows.map(r => ({
+      id: r.id,
+      nome: r.nome,
+      slug: r.slug,
+      plano: r.plano,
+      logoUrl: r.logo_url ?? (r.slug === 'andre-oliveira' ? DEFAULT_ASO_LOGO_DATA_URL : null),
+      whatsappDisplayPhone: r.whatsapp_display_phone
+    }));
+  }
+
+  async trocarEscritorio(
+    usuarioId: string,
+    escritorioId: string
+  ): Promise<{ token: string; usuario: UsuarioPublicoDto }> {
+    const userRes = await this.pool.query<UsuarioRow>(
+      `SELECT u.id::text AS id, u.nome, u.email, u.senha_hash, u.role, u.ativo
+       FROM usuarios u WHERE u.id = $1::uuid AND u.ativo = TRUE`,
+      [usuarioId]
+    );
+    const user = userRes.rows[0];
+    if (!user) throw new AuthUnauthorizedError('Usuário não encontrado.');
+
+    const escRes = await this.pool.query<{
+      id: string;
+      nome: string;
+      slug: string;
+      plano: string;
+      logo_url: string | null;
+    }>(
+      `SELECT id::text AS id, nome, slug, plano, logo_url FROM escritorios WHERE id = $1::uuid AND ativo = TRUE`,
+      [escritorioId]
+    );
+    const esc = escRes.rows[0];
+    if (!esc) throw new Error('Escritório selecionado não encontrado ou inativo.');
+
+    if (user.role === 'ADVOGADO') {
+      const permRes = await this.pool.query(
+        `SELECT 1 FROM usuarios_escritorios WHERE usuario_id = $1::uuid AND escritorio_id = $2::uuid`,
+        [usuarioId, escritorioId]
+      );
+      if (permRes.rows.length === 0) {
+        throw new Error('Acesso não autorizado a este escritório.');
+      }
+    }
+
+    let numeroOab = '69161';
+    let ufOab = 'PR';
+    let advogadoId: string | null = null;
+    const advRes = await this.pool.query<{ id: string; numero_oab: string; uf_oab: string }>(
+      `SELECT id::text AS id, numero_oab, uf_oab FROM advogados WHERE escritorio_id = $1::uuid LIMIT 1`,
+      [escritorioId]
+    );
+    if (advRes.rows.length > 0) {
+      advogadoId = advRes.rows[0].id;
+      numeroOab = advRes.rows[0].numero_oab;
+      ufOab = advRes.rows[0].uf_oab;
+    }
+
+    await this.pool.query(
+      `UPDATE usuarios SET escritorio_id = $1::uuid, advogado_id = $2::uuid WHERE id = $3::uuid`,
+      [escritorioId, advogadoId, usuarioId]
+    );
+
+    await this.pool.query(
+      `INSERT INTO usuarios_escritorios (usuario_id, escritorio_id, papel)
+       VALUES ($1::uuid, $2::uuid, $3)
+       ON CONFLICT (usuario_id, escritorio_id) DO NOTHING`,
+      [usuarioId, escritorioId, user.role]
+    );
+
+    const payload: Omit<AuthTokenPayload, 'exp'> = {
+      sub: user.id,
+      email: user.email,
+      nome: user.nome,
+      role: user.role,
+      escritorioId: esc.id,
+      escritorioNome: esc.nome,
+      numeroOab,
+      ufOab
+    };
+
+    const perfil = await this.obterPerfil(user.id);
+    if (!perfil) throw new Error('Falha ao recarregar perfil.');
+
+    return {
+      token: signAuthToken(payload),
+      usuario: perfil
+    };
+  }
+
 
   async login(email: string, senha: string): Promise<{ token: string; usuario: UsuarioPublicoDto }> {
     const emailLimpo = email.trim().toLowerCase();
@@ -134,10 +280,11 @@ export class AuthService implements AuthServicePort {
       [row.id]
     );
 
+    const escritoriosDisponiveis = await this.listarEscritoriosDisponiveis(row.id, row.role);
     const usuario = mapearUsuarioPublico({
       ...row,
       ultimo_login_em: new Date().toISOString()
-    });
+    }, escritoriosDisponiveis);
 
     const payload: Omit<AuthTokenPayload, 'exp'> = {
       sub: usuario.id,
@@ -173,7 +320,9 @@ export class AuthService implements AuthServicePort {
       [usuarioId]
     );
     const row = result.rows[0];
-    return row ? mapearUsuarioPublico(row) : null;
+    if (!row) return null;
+    const escritoriosDisponiveis = await this.listarEscritoriosDisponiveis(row.id, row.role);
+    return mapearUsuarioPublico(row, escritoriosDisponiveis);
   }
 
   async listarUsuariosETenants() {

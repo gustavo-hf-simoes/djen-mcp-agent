@@ -369,12 +369,12 @@ export function App() {
 
       {/* PÁGINA 3: PRAZOS & PROVIDÊNCIAS DA CONTROLADORIA */}
       {activePage === 'controladoria_prazos' && (
-        <ControladoriaPanel refreshTrigger={refreshTrigger} />
+        <ControladoriaPanel key={usuario.escritorio.id ?? "global"} refreshTrigger={refreshTrigger} />
       )}
 
       {/* PÁGINA 4: OPERACIONAL WHATSAPP (Estação 3 Colunas: Fila + Conversa Unificada + Checklist/Dossiê) */}
       {activePage === 'operacional_whatsapp' && (
-        <OperacionalWhatsappPanel />
+        <OperacionalWhatsappPanel key={usuario.escritorio.id ?? "global"} />
       )}
 
       {/* PÁGINAS DE EXPANSÃO DO ECOSSISTEMA */}

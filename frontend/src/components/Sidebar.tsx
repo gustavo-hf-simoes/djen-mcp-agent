@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import {
   SignOut,
   ArrowsClockwise,
+  Buildings,
   ShieldCheck,
   FolderSimple,
   Kanban,
@@ -15,7 +16,7 @@ import {
   Check,
   X,
 } from '@phosphor-icons/react'
-import { atualizarIdentidadeEscritorio, type UsuarioSessao } from '../api/djen'
+import { atualizarIdentidadeEscritorio, trocarEscritorioAtivo, type UsuarioSessao } from '../api/djen'
 
 export const DEFAULT_ASO_LOGO_DATA_URL =
   'data:image/svg+xml;utf8,' +
@@ -159,6 +160,23 @@ export function Sidebar({
   const [officeName, setOfficeName] = useState(usuario.escritorio.nome || 'ASO Advogados')
   const [officeLogo, setOfficeLogo] = useState<string>(usuario.escritorio.logoUrl || DEFAULT_ASO_LOGO_DATA_URL)
   const [savingBrand, setSavingBrand] = useState(false)
+  const [switchingTenant, setSwitchingTenant] = useState(false)
+
+  async function handleTrocarTenant(targetId: string) {
+    if (!targetId || targetId === usuario.escritorio.id) return
+    setSwitchingTenant(true)
+    try {
+      const res = await trocarEscritorioAtivo(targetId)
+      if (onUpdateUsuario) {
+        onUpdateUsuario(res.usuario)
+      }
+    } catch (err) {
+      console.error('Erro ao alternar tenant:', err)
+    } finally {
+      setSwitchingTenant(false)
+    }
+  }
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const isMaster = usuario.role === 'MASTER'
@@ -294,6 +312,53 @@ export function Sidebar({
             {roleInfo.label}
           </span>
         </div>
+
+        {/* Seletor Rápido de Tenant (Multi-Tenant Switcher para MASTER / ADMIN) */}
+        {usuario.escritoriosDisponiveis && usuario.escritoriosDisponiveis.length > 1 && (
+          <div
+            className="p-2.5 rounded-xl flex items-center justify-between gap-2.5"
+            style={{
+              background: 'var(--color-surface-overlay)',
+              border: '1px solid rgba(224,159,62,0.3)',
+            }}
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                style={{ background: 'rgba(224,159,62,0.15)', color: 'var(--color-accent)' }}
+              >
+                <Buildings size={16} weight="bold" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-ink-faint)' }}>
+                  Ambiente / Tenant
+                </p>
+                <select
+                  value={usuario.escritorio.id ?? ''}
+                  onChange={e => void handleTrocarTenant(e.target.value)}
+                  disabled={switchingTenant}
+                  className="w-full text-xs font-bold bg-transparent border-0 outline-none cursor-pointer truncate"
+                  style={{ color: 'var(--color-ink)' }}
+                >
+                  {usuario.escritoriosDisponiveis.map(esc => (
+                    <option
+                      key={esc.id}
+                      value={esc.id}
+                      style={{ background: '#1c1b22', color: '#f4f4f5' }}
+                    >
+                      {esc.nome} ({esc.plano})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            {switchingTenant && (
+              <span className="text-[10px] animate-pulse shrink-0 font-medium" style={{ color: 'var(--color-accent)' }}>
+                Trocando...
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Painel Rápido de Personalização da Marca do Escritório */}
         {editingBrand && (

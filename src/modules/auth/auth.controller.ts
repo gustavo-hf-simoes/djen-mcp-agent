@@ -103,6 +103,26 @@ export class AuthController {
     }
   }
 
+  async trocarEscritorio(req: Request, res: Response) {
+    try {
+      if (!req.authUser) {
+        return res.status(401).json({ error: 'Sessão não autenticada.' });
+      }
+      if (!this.authService.trocarEscritorio) {
+        return res.status(501).json({ error: 'Troca de escritório não disponível.' });
+      }
+      const { escritorioId } = req.body ?? {};
+      if (typeof escritorioId !== 'string' || !escritorioId.trim()) {
+        return res.status(400).json({ error: 'Informe o ID do escritório de destino.' });
+      }
+      const resultado = await this.authService.trocarEscritorio(req.authUser.sub, escritorioId.trim());
+      return res.json(resultado);
+    } catch (error: any) {
+      console.error('Erro ao trocar escritório ativo:', error);
+      return res.status(400).json({ error: error.message || 'Falha ao trocar escritório.' });
+    }
+  }
+
   async atualizarEscritorio(req: Request, res: Response) {
     try {
       if (!req.authUser) {

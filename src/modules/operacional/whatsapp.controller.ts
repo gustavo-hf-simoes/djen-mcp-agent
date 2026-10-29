@@ -127,7 +127,7 @@ export class WhatsAppWebhookController {
       if (!this.service.listarClientes) {
         return res.status(501).json({ error: 'Listagem de clientes não implementada.' });
       }
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const escritorioId = this.extrairEscritorioId(req);
       const items = await this.service.listarClientes(escritorioId);
       return res.status(200).json({ items });
     } catch (error) {
@@ -142,7 +142,7 @@ export class WhatsAppWebhookController {
         return res.status(501).json({ error: 'Dossiê não implementado.' });
       }
       const clienteId = String(req.params.id || '');
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const escritorioId = this.extrairEscritorioId(req);
       const dossie = await this.service.obterDossieCliente(clienteId, escritorioId);
       if (!dossie) {
         return res.status(404).json({ error: 'Dossiê do cliente não encontrado.' });
@@ -160,7 +160,7 @@ export class WhatsAppWebhookController {
         return res.status(501).json({ error: 'Download de mídia não implementado.' });
       }
       const documentoId = String(req.params.id || '');
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const escritorioId = this.extrairEscritorioId(req);
       const arquivo = await this.service.obterArquivoMidia(documentoId, escritorioId);
       if (!arquivo) {
         return res.status(404).json({ error: 'Arquivo não encontrado na pasta do cliente.' });
@@ -181,7 +181,7 @@ export class WhatsAppWebhookController {
         return res.status(501).json({ error: 'Exportação ZIP não implementada.' });
       }
       const clienteId = String(req.params.id || '');
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const escritorioId = this.extrairEscritorioId(req);
       const pacote = await this.service.gerarZipPastaCliente(clienteId, escritorioId);
       if (!pacote) {
         return res.status(404).json({ error: 'Pasta do cliente não encontrada.' });
@@ -201,7 +201,7 @@ export class WhatsAppWebhookController {
         return res.status(501).json({ error: 'Atualização de checklist não implementada.' });
       }
       const clienteId = String(req.params.id || '');
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : (req.authUser?.escritorioId ?? undefined);
+      const escritorioId = this.extrairEscritorioId(req);
       const atualizado = await this.service.atualizarChecklistCliente(clienteId, req.body ?? {}, escritorioId);
       if (!atualizado) {
         return res.status(404).json({ error: 'Cliente não encontrado.' });
@@ -219,7 +219,7 @@ export class WhatsAppWebhookController {
     try {
       const id = String(req.params.id ?? '').trim();
       if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const resultado = await this.service.processarMidiasPendentesCliente(id);
       const dossie = await this.service.obterDossieCliente(id, escritorioId);
       return res.json({ success: true, processados: resultado.processados, dossie });
@@ -233,7 +233,7 @@ export class WhatsAppWebhookController {
     try {
       const id = String(req.params.id ?? '').trim();
       if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const qualificacao = await this.service.processarExtracaoDocumentosCliente(id, escritorioId);
       return res.json({ success: true, qualificacao });
     } catch (error) {
@@ -246,7 +246,7 @@ export class WhatsAppWebhookController {
     try {
       const id = String(req.params.id ?? '').trim();
       if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const dossieAtualizado = await this.service.atualizarQualificacaoCliente(id, req.body ?? {}, escritorioId);
       if (!dossieAtualizado) return res.status(404).json({ error: 'Cliente não encontrado.' });
       return res.json(dossieAtualizado);
@@ -260,7 +260,7 @@ export class WhatsAppWebhookController {
     try {
       const id = String(req.params.id ?? '').trim();
       if (!id) return res.status(400).json({ error: 'ID do cliente inválido.' });
-      const escritorioId = req.authUser?.role === 'MASTER' ? undefined : req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const doc = await this.service.gerarKitContratualCliente(id, escritorioId);
       if (!doc) return res.status(404).json({ error: 'Cliente não encontrado para emissão do kit contratual.' });
 
@@ -278,7 +278,7 @@ export class WhatsAppWebhookController {
 
   async obterConfiguracao(req: Request, res: Response) {
     try {
-      const escritorioId = req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const tenantConfig = this.service.obterConfiguracaoTenant
         ? await this.service.obterConfiguracaoTenant(escritorioId)
         : {
@@ -307,7 +307,7 @@ export class WhatsAppWebhookController {
       if (!this.service.salvarConfiguracaoTenant) {
         return res.status(501).json({ error: 'Salvamento de configuração não suportado.' });
       }
-      const escritorioId = req.authUser?.escritorioId ?? undefined;
+      const escritorioId = this.extrairEscritorioId(req);
       const { whatsappWabaId, whatsappPhoneNumberId, whatsappDisplayPhone, accessToken } = req.body ?? {};
       const salvo = await this.service.salvarConfiguracaoTenant(escritorioId, {
         whatsappPhoneNumberId: String(whatsappPhoneNumberId ?? ''),

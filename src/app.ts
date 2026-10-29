@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
   authMe: '/api/v1/auth/me',
   authUsuarios: '/api/v1/auth/usuarios',
   authEscritorio: '/api/v1/auth/escritorio',
+  authTrocarEscritorio: '/api/v1/auth/trocar-escritorio',
   djenComunicacoes: '/api/v1/comunicacao',
   djenStatus: '/api/djen/intimacoes/:id/status',
   publicacaoStatus: '/api/v1/publicacoes/:id/status',
@@ -95,6 +96,7 @@ export function createApp(
     app.post(API_ENDPOINTS.authLogin, (req, res) => authController.login(req, res));
     app.get(API_ENDPOINTS.authMe, protect, (req, res) => authController.me(req, res));
     app.patch(API_ENDPOINTS.authEscritorio, protect, (req, res) => authController.atualizarEscritorio(req, res));
+    app.post(API_ENDPOINTS.authTrocarEscritorio, protect, (req, res) => authController.trocarEscritorio(req, res));
     app.get(
       API_ENDPOINTS.authUsuarios,
       protect,

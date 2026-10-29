@@ -10,6 +10,15 @@ const TOKEN_STORAGE_KEY = 'ghfs_adv_saas_token'
 
 export type UserRole = 'MASTER' | 'ADMIN_DEV' | 'ADVOGADO'
 
+export interface EscritorioResumoDto {
+  id: string
+  nome: string
+  slug: string
+  plano: string
+  logoUrl?: string | null
+  whatsappDisplayPhone?: string | null
+}
+
 export interface UsuarioSessao {
   id: string
   nome: string
@@ -28,6 +37,7 @@ export interface UsuarioSessao {
     uf: string
   }
   ultimoLoginEm: string | null
+  escritoriosDisponiveis?: EscritorioResumoDto[]
 }
 
 export interface PublicacaoLocalDto {
@@ -207,6 +217,15 @@ export async function loginSaas(email: string, senha: string): Promise<{ token: 
 
 export async function buscarSessaoAtual(): Promise<{ usuario: UsuarioSessao }> {
   return apiFetch<{ usuario: UsuarioSessao }>('/api/v1/auth/me')
+}
+
+export async function trocarEscritorioAtivo(escritorioId: string): Promise<{ token: string; usuario: UsuarioSessao }> {
+  const result = await apiFetch<{ token: string; usuario: UsuarioSessao }>('/api/v1/auth/trocar-escritorio', {
+    method: 'POST',
+    body: { escritorioId },
+  })
+  setStoredToken(result.token)
+  return result
 }
 
 export async function buscarAdminOverview(): Promise<SaasAdminOverview> {
