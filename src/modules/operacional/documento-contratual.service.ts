@@ -15,6 +15,16 @@ export interface DadosContratuaisCliente {
   tipoCaso?: string;
   dataExtenso?: string;
   resumoFatos?: string;
+  dadosEscritorio?: {
+    nomeEscritorio?: string;
+    logoUrl?: string;
+    advogadoTitular?: string;
+    oabNumero?: string;
+    oabUf?: string;
+    enderecoProfissional?: string;
+    emailContato?: string;
+    telefoneContato?: string;
+  };
 }
 
 export function formatarDataExtenso(date = new Date()): string {
@@ -42,6 +52,15 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
   const telefone = dados.telefone || '(43) 9 9999-9999';
   const email = dados.email || 'sem endereço eletrônico cadastrado';
 
+  const nomeEscritorio = dados.dadosEscritorio?.nomeEscritorio || 'ASO Advogados';
+  const logoEscritorio = dados.dadosEscritorio?.logoUrl || DEFAULT_ASO_LOGO_DATA_URL;
+  const advogadoTitular = (dados.dadosEscritorio?.advogadoTitular || 'ANDRÉ SANTOS DE OLIVEIRA').toUpperCase();
+  const oabNumero = dados.dadosEscritorio?.oabNumero || '69.161';
+  const oabUf = dados.dadosEscritorio?.oabUf || 'PR';
+  const enderecoProfissional = dados.dadosEscritorio?.enderecoProfissional || 'Rua Pedro Rossato, nº 55, unidade 20, CEP 86.084-016, na cidade de Londrina/PR';
+  const emailProfissional = dados.dadosEscritorio?.emailContato || 'andreolicontato@gmail.com';
+  const telefoneProfissional = dados.dadosEscritorio?.telefoneContato || '(44) 9 9850-7150';
+
   let objetoCaso = 'questões bancárias e de consumo';
   let poderesEspecificos = 'propor ações de RMC SANTANDER, RCC BANCO PAN, CONTRIBUIÇÃO SINDICAL, VENDA CASADA SEGURO, REVISÃO BANCÁRIA E DEFESA DO CONSUMIDOR';
 
@@ -60,7 +79,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <title>Kit Contratual & Procuração — ASO Advogados — ${nomeCliente}</title>
+  <title>Kit Contratual & Procuração — ${nomeEscritorio} — ${nomeCliente}</title>
   <style>
     @page {
       size: A4;
@@ -201,7 +220,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
 
   <div class="no-print-bar">
     <div>
-      <strong>ASO Advogados</strong> — Kit Contratual Gerado para <strong>${nomeCliente}</strong>
+      <strong>${nomeEscritorio}</strong> — Kit Contratual Gerado para <strong>${nomeCliente}</strong>
       <div style="font-size: 11px; opacity: 0.8; margin-top: 2px;">
         Pronto para conferência, impressão em PDF ou envio para assinatura digital (ZapSign / Clicksign / Gov.br)
       </div>
@@ -212,7 +231,7 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
   <!-- PÁGINA 1: PROCURAÇÃO "AD JUDICIA" -->
   <div class="sheet">
     <div class="header-logo">
-      <img src="${DEFAULT_ASO_LOGO_DATA_URL}" alt="ASO Advogados">
+      <img src="${logoEscritorio}" alt="${nomeEscritorio}">
     </div>
 
     <h1>PROCURAÇÃO "AD JUDICIA"</h1>
@@ -225,9 +244,9 @@ export function gerarHtmlKitContratualAso(dados: DadosContratuaisCliente): strin
     </p>
 
     <p>
-      <strong>ANDRÉ SANTOS DE OLIVEIRA</strong>, brasileiro, casado, advogado inscrito na Ordem dos Advogados do Brasil
-      sob <strong>OAB/PR 69.161</strong>, com escritório profissional situado na Rua Pedro Rossato, nº 55, unidade 20,
-      CEP 86.084-016, na cidade de Londrina/PR, e-mail: <em>andreolicontato@gmail.com</em>, telefone (44) 9 9850-7150,
+      <strong>${advogadoTitular}</strong>, advogado(a) devidamente inscrito(a) na Ordem dos Advogados do Brasil
+      sob <strong>OAB/${oabUf} ${oabNumero}</strong>, com escritório profissional situado no(a) ${enderecoProfissional},
+      e-mail: <em>${emailProfissional}</em>, telefone ${telefoneProfissional},
     </p>
 
     <p>

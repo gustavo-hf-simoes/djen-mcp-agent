@@ -1613,8 +1613,35 @@ export class WhatsAppWebhookService {
     }
 
     const q = dossie.cliente.qualificacao;
+
+    // Resolve dados do escritório ativo para personalizar contrato e procuração
+    const escId = dossie.cliente.escritorioId || escritorioId;
+    let dadosEscritorio: import('./documento-contratual.service').DadosContratuaisCliente['dadosEscritorio'] = undefined;
+    if (escId) {
+      const escRes = await this.pool.query<{ nome: string; logo_url: string | null }>(
+        `SELECT nome, logo_url FROM escritorios WHERE id = $1`,
+        [escId]
+      );
+      const advRes = await this.pool.query<{ nome: string; numero_oab: string; uf_oab: string }>(
+        `SELECT nome, numero_oab, uf_oab FROM advogados WHERE escritorio_id = $1 LIMIT 1`,
+        [escId]
+      );
+      if (escRes.rows.length > 0) {
+        dadosEscritorio = {
+          nomeEscritorio: escRes.rows[0].nome,
+          logoUrl: escRes.rows[0].logo_url ?? undefined,
+          ...(advRes.rows.length > 0 ? {
+            advogadoTitular: advRes.rows[0].nome,
+            oabNumero: advRes.rows[0].numero_oab,
+            oabUf: advRes.rows[0].uf_oab
+          } : {})
+        };
+      }
+    }
+
     const html = gerarHtmlKitContratualAso({
       nomeCliente: dossie.cliente.nome,
+      dadosEscritorio,
       telefone: dossie.cliente.telefone,
       cpf: q?.cpf ?? undefined,
       rg: q?.rg ? (q.orgaoEmissor ? `${q.rg} ${q.orgaoEmissor}` : q.rg) : undefined,
