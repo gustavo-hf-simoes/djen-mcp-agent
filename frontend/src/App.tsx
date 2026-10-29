@@ -118,7 +118,7 @@ type AppStatus = 'loading' | 'success' | 'error'
 export function App() {
   const [usuario, setUsuario]                 = useState<UsuarioSessao | null>(null)
   const [checkingAuth, setCheckingAuth]       = useState(true)
-  const [activePage, setActivePage]           = useState<NavPageId>('djen_publicacoes')
+  const [activePage, setActivePage]           = useState<NavPageId>('operacional_whatsapp')
   const [syncing, setSyncing]                 = useState(false)
   const [syncMessage, setSyncMessage]         = useState<string | null>(null)
   const [refreshTrigger, setRefreshTrigger]   = useState(0)

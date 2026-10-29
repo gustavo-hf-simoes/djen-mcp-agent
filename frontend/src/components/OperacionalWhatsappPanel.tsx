@@ -28,6 +28,9 @@ import {
   IdentificationCard,
   ListChecks,
   Scroll,
+  Trash,
+  PenNib,
+  Lightning,
 } from '@phosphor-icons/react'
 import {
   buscarClientesOperacional,
@@ -102,9 +105,25 @@ export function OperacionalWhatsappPanel() {
   const [savingQualificacao, setSavingQualificacao] = useState(false)
   const [qualificacaoMsg, setQualificacaoMsg] = useState<string | null>(null)
 
-  // Filtros da Fila
+  // Filtros da Fila & Contatos Descartados (Spam / Não é cliente)
   const [buscaCliente, setBuscaCliente] = useState('')
   const [filtroCaso, setFiltroCaso] = useState<string>('TODOS')
+  const [mostrarDescartados, setMostrarDescartados] = useState(false)
+  const [descartadosIds, setDescartadosIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('ghfs_contatos_descartados')
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  // Modal Central (WhatsApp vs Assinatura Eletrônica)
+  const [modalConfigTab, setModalConfigTab] = useState<'whatsapp' | 'assinatura'>('whatsapp')
+  const [zapsignToken, setZapsignToken] = useState(() => {
+    return localStorage.getItem('ghfs_zapsign_token') || ''
+  })
+  const [savedZapsignMsg, setSavedZapsignMsg] = useState<string | null>(null)
 
   // Navegação Mobile (Alterna entre Fila, Chat e Dossiê no celular)
   const [mobileTab, setMobileTab] = useState<'lista' | 'chat' | 'dossie'>('lista')
@@ -248,9 +267,13 @@ export function OperacionalWhatsappPanel() {
     return { novos, pendentes, prontos, semRetorno }
   }, [clientes])
 
-  // Filtro de Busca da Lista
+  // Filtro de Busca da Lista & Descarte de Spam
   const clientesFiltrados = useMemo(() => {
     return clientes.filter(c => {
+      const isDescartado = descartadosIds.includes(c.id)
+      if (!mostrarDescartados && isDescartado) return false
+      if (mostrarDescartados && !isDescartado) return false
+
       const matchBusca =
         !buscaCliente.trim() ||
         c.nome.toLowerCase().includes(buscaCliente.toLowerCase()) ||
@@ -258,7 +281,64 @@ export function OperacionalWhatsappPanel() {
       const matchCaso = filtroCaso === 'TODOS' || c.tipoCaso === filtroCaso
       return matchBusca && matchCaso
     })
-  }, [clientes, buscaCliente, filtroCaso])
+  }, [clientes, buscaCliente, filtroCaso, descartadosIds, mostrarDescartados])
+
+  function handleDescartarContato(clienteId: string) {
+    const updated = descartadosIds.includes(clienteId) ? descartadosIds : [...descartadosIds, clienteId]
+    setDescartadosIds(updated)
+    try {
+      localStorage.setItem('ghfs_contatos_descartados', JSON.stringify(updated))
+    } catch {}
+    const restantes = clientesFiltrados.filter(c => c.id !== clienteId)
+    setSelectedId(restantes.length > 0 ? restantes[0]!.id : null)
+  }
+
+  function handleRestaurarContato(clienteId: string) {
+    const updated = descartadosIds.filter(id => id !== clienteId)
+    setDescartadosIds(updated)
+    try {
+      localStorage.setItem('ghfs_contatos_descartados', JSON.stringify(updated))
+    } catch {}
+  }
+
+  // Janela de 24 Horas da Meta (Mensagens Gratuitas de Atendimento)
+  const janela24h = useMemo(() => {
+    if (!dossie || !dossie.mensagens.length) return null
+    const ultimasEntradas = dossie.mensagens
+      .filter(m => m.direcao === 'ENTRADA')
+      .sort((a, b) => new Date(b.enviadaEm).getTime() - new Date(a.enviadaEm).getTime())
+
+    const ultimaEntrada = ultimasEntradas[0]
+    const dataRef = ultimaEntrada ? new Date(ultimaEntrada.enviadaEm) : new Date(dossie.cliente.updatedAt)
+    const horasDecorridas = (Date.now() - dataRef.getTime()) / (1000 * 3600)
+    const horasRestantes = Math.max(0, 24 - horasDecorridas)
+
+    if (horasRestantes > 4) {
+      return {
+        status: 'ativa',
+        label: `Resposta gratuita ativa (restam ${Math.floor(horasRestantes)}h)`,
+        color: '#4ade80',
+        bg: 'rgba(74,222,128,0.12)',
+        border: 'rgba(74,222,128,0.25)',
+      }
+    } else if (horasRestantes > 0) {
+      return {
+        status: 'encerrando',
+        label: `Janela encerrando em ${Math.max(1, Math.floor(horasRestantes))}h`,
+        color: '#fbbf24',
+        bg: 'rgba(251,191,36,0.12)',
+        border: 'rgba(251,191,36,0.25)',
+      }
+    } else {
+      return {
+        status: 'expirada',
+        label: 'Janela 24h expirada · Requer modelo oficial',
+        color: '#94a3b8',
+        bg: 'rgba(148,163,184,0.10)',
+        border: 'rgba(148,163,184,0.20)',
+      }
+    }
+  }, [dossie])
 
   // Player de Áudio customizado
   function togglePlayAudio(audioId: string) {
@@ -651,6 +731,19 @@ export function OperacionalWhatsappPanel() {
                 </button>
               </div>
             )}
+
+            {descartadosIds.length > 0 && (
+              <div className="flex items-center justify-between text-[10px] px-1 pt-1" style={{ color: 'var(--color-ink-faint)' }}>
+                <span>{descartadosIds.length} contato(s) descartado(s)</span>
+                <button
+                  type="button"
+                  onClick={() => setMostrarDescartados(!mostrarDescartados)}
+                  className="hover:underline cursor-pointer text-amber-400 font-semibold"
+                >
+                  {mostrarDescartados ? 'Ver Ativos' : 'Ver Descartados'}
+                </button>
+              </div>
+            )}
           </div>
 
           {loadingList ? (
@@ -773,13 +866,60 @@ export function OperacionalWhatsappPanel() {
                     <h3 className="text-xs font-bold truncate" style={{ color: 'var(--color-ink)' }}>
                       {dossie.cliente.nome}
                     </h3>
-                    <p className="text-[10px] font-mono" style={{ color: 'var(--color-ink-muted)' }}>
-                      {formatTelefone(dossie.cliente.telefone)} · {dossie.mensagens.length} mensagens
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-[10px] font-mono" style={{ color: 'var(--color-ink-muted)' }}>
+                        {formatTelefone(dossie.cliente.telefone)} · {dossie.mensagens.length} msgs
+                      </p>
+                      {janela24h && (
+                        <span
+                          className="text-[9px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+                          style={{
+                            background: janela24h.bg,
+                            color: janela24h.color,
+                            border: `1px solid ${janela24h.border}`,
+                          }}
+                          title="Janela de atendimento de 24 horas da Meta Cloud API para envio sem custos"
+                        >
+                          <Lightning size={9} weight="fill" />
+                          {janela24h.label}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0">
+                  {mostrarDescartados ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRestaurarContato(dossie.cliente.id)}
+                      className="px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all"
+                      style={{
+                        background: 'rgba(74,222,128,0.12)',
+                        border: '1px solid rgba(74,222,128,0.3)',
+                        color: '#4ade80',
+                      }}
+                    >
+                      <Check size={12} weight="bold" />
+                      Restaurar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDescartarContato(dossie.cliente.id)}
+                      className="px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all"
+                      style={{
+                        background: 'var(--color-surface-overlay)',
+                        border: '1px solid var(--color-edge)',
+                        color: 'var(--color-ink-faint)',
+                      }}
+                      title="Oculta contato da fila ativa (spam, telemarketing ou não-cliente)"
+                    >
+                      <Trash size={12} />
+                      <span className="hidden sm:inline">Não é Cliente</span>
+                    </button>
+                  )}
+
                   <button
                     type="button"
                     onClick={copiarMensagemCobrancaFaltantes}
@@ -1389,7 +1529,7 @@ export function OperacionalWhatsappPanel() {
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={20} weight="fill" style={{ color: 'var(--color-accent)' }} />
                   <h3 className="text-sm font-bold" style={{ color: 'var(--color-ink)' }}>
-                    Conexão Oficial Meta WhatsApp Cloud API · {config?.escritorioNome ?? 'Escritório'}
+                    Configurações de Conexão · {config?.escritorioNome ?? 'Escritório'}
                   </h3>
                 </div>
                 <button
@@ -1401,7 +1541,37 @@ export function OperacionalWhatsappPanel() {
                 </button>
               </div>
 
+              {/* Seletor de Abas do Modal */}
+              <div className="flex border-b border-zinc-800 px-6 pt-2 gap-2 bg-zinc-950/40">
+                <button
+                  type="button"
+                  onClick={() => setModalConfigTab('whatsapp')}
+                  className="py-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer transition-colors"
+                  style={{
+                    borderBottomColor: modalConfigTab === 'whatsapp' ? 'var(--color-accent)' : 'transparent',
+                    color: modalConfigTab === 'whatsapp' ? 'var(--color-accent)' : 'var(--color-ink-muted)',
+                  }}
+                >
+                  <WhatsappLogo size={14} weight="fill" />
+                  Meta WhatsApp Cloud API
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalConfigTab('assinatura')}
+                  className="py-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer transition-colors"
+                  style={{
+                    borderBottomColor: modalConfigTab === 'assinatura' ? 'var(--color-accent)' : 'transparent',
+                    color: modalConfigTab === 'assinatura' ? 'var(--color-accent)' : 'var(--color-ink-muted)',
+                  }}
+                >
+                  <PenNib size={14} weight="bold" />
+                  Assinatura Eletrônica (ZapSign / Gov.br)
+                </button>
+              </div>
+
               <div className="p-6 space-y-5 overflow-y-auto overscroll-contain">
+                {modalConfigTab === 'whatsapp' ? (
+                <>
                 {/* Passo 1 & 2: Dados do Webhook p/ o Desenvolvedor / Setup */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="p-3.5 rounded-xl space-y-1.5" style={{ background: 'var(--color-surface-overlay)' }}>
@@ -1543,6 +1713,59 @@ export function OperacionalWhatsappPanel() {
                     </div>
                   </div>
                 </form>
+                </>
+                ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl space-y-2" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)' }}>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle size={16} weight="fill" className="text-emerald-400" />
+                      <h4 className="text-xs font-bold text-emerald-300">Modo Padrão: Assinador Oficial Gov.br (Gratuito)</h4>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-zinc-300">
+                      Válido para todo o Brasil conforme MP 2.200-2/2001 e Lei 14.063/2020. O cliente assina gratuitamente
+                      com sua conta Gov.br (Prata ou Ouro) sem custos de API ou mensalidades para o escritório.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl space-y-3" style={{ background: 'var(--color-surface-overlay)', border: '1px solid var(--color-edge)' }}>
+                    <div className="flex items-center gap-2">
+                      <PenNib size={16} weight="bold" style={{ color: 'var(--color-accent)' }} />
+                      <h4 className="text-xs font-bold" style={{ color: 'var(--color-ink)' }}>Integração ZapSign / Clicksign (Opcional)</h4>
+                    </div>
+                    <p className="text-[11px] leading-relaxed text-zinc-400">
+                      Se você já possui conta na ZapSign ou Clicksign e prefere que o cliente assine com 1 toque na tela do celular pelo WhatsApp, cole sua chave de API abaixo:
+                    </p>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-semibold uppercase text-zinc-400">Token de API da ZapSign</label>
+                      <input
+                        type="password"
+                        placeholder="Ex: zapsign_live_..."
+                        value={zapsignToken}
+                        onChange={e => setZapsignToken(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl text-xs font-mono outline-none"
+                        style={{ background: 'var(--color-surface)', border: '1px solid var(--color-edge)', color: 'var(--color-ink)' }}
+                      />
+                    </div>
+
+                    {savedZapsignMsg && (
+                      <p className="text-[11px] text-emerald-400 font-semibold">{savedZapsignMsg}</p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem('ghfs_zapsign_token', zapsignToken.trim())
+                        setSavedZapsignMsg('Chave de API da ZapSign salva com sucesso!')
+                        setTimeout(() => setSavedZapsignMsg(null), 3000)
+                      }}
+                      className="px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style={{ background: 'var(--color-accent)', color: '#09090b' }}
+                    >
+                      Salvar Chave ZapSign
+                    </button>
+                  </div>
+                </div>
+                )}
               </div>
             </motion.div>
           </div>

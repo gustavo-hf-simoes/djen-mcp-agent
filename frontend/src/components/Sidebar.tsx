@@ -57,36 +57,36 @@ interface NavGroup {
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    groupTitle: 'Controladoria & DJEN',
+    groupTitle: 'Atendimento & Instrução (Front-Office)',
     items: [
       {
-        id: 'djen_publicacoes',
-        label: 'Publicações DJEN',
-        keywords: 'publicacoes djen diario intimacoes citacoes busca oficial',
-        icon: MagnifyingGlass,
+        id: 'operacional_whatsapp',
+        label: 'Triagem & Atendimento',
+        keywords: 'whatsapp operacional audios transcricao documentos checklist zapsign procuracao clientes leads atendimento',
+        icon: WhatsappLogo,
       },
       {
         id: 'processos_pastas',
-        label: 'Pastas de Processos',
-        keywords: 'pastas processos cnj clientes certidoes baixar pdf zip',
+        label: 'Pastas & Dossiês',
+        keywords: 'pastas processos cnj clientes certidoes baixar pdf zip acervo',
         icon: FolderSimple,
-      },
-      {
-        id: 'controladoria_prazos',
-        label: 'Prazos & Providências',
-        keywords: 'prazos providencias controladoria kanban tarefas ia',
-        icon: Kanban,
       },
     ],
   },
   {
-    groupTitle: 'Atendimento & Operacional',
+    groupTitle: 'Controladoria & Processos (Back-Office)',
     items: [
       {
-        id: 'operacional_whatsapp',
-        label: 'Triagem WhatsApp',
-        keywords: 'whatsapp operacional audios transcricao documentos checklist zapsign procuracao',
-        icon: WhatsappLogo,
+        id: 'djen_publicacoes',
+        label: 'Diário DJEN & Publicações',
+        keywords: 'publicacoes djen diario intimacoes citacoes busca oficial cnj tribunal',
+        icon: MagnifyingGlass,
+      },
+      {
+        id: 'controladoria_prazos',
+        label: 'Prazos & Providências',
+        keywords: 'prazos providencias controladoria kanban tarefas ia cpc fatal alerta',
+        icon: Kanban,
       },
     ],
   },
