@@ -128,6 +128,7 @@ export function OperacionalWhatsappPanel() {
   const [audioDurations, setAudioDurations] = useState<Record<string, number>>({})
   const [expandedTranscricaoId, setExpandedTranscricaoId] = useState<string | null>(null)
   const audioRefs = useRef<Record<string, HTMLAudioElement | null>>({})
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
 
   // Edição de Qualificação
   const [editQualificacao, setEditQualificacao] = useState(false)
@@ -218,6 +219,12 @@ export function OperacionalWhatsappPanel() {
       setUfInput(q.uf ?? '')
     }
   }, [dossie?.cliente.id, dossie?.cliente.qualificacao])
+
+  useEffect(() => {
+    if (dossie?.mensagens?.length) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [dossie?.cliente?.id, dossie?.mensagens?.length])
 
   async function handleManualRefresh() {
     setRefreshing(true)
@@ -678,7 +685,7 @@ export function OperacionalWhatsappPanel() {
               )}
             </div>
           ) : (
-            <div className="space-y-1.5 max-h-[640px] overflow-y-auto overscroll-contain pr-1">
+            <div className="space-y-1.5 flex-1 overflow-y-auto overscroll-contain pr-1 pb-6">
               {clientesFiltrados.map(cli => {
                 const isSelected = cli.id === selectedId
                 const caso = TIPO_CASO_LABELS[cli.tipoCaso] ?? TIPO_CASO_LABELS.NAO_CLASSIFICADO
