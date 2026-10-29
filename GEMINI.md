@@ -43,6 +43,13 @@ A usabilidade intuitiva é o maior diferencial comercial do SaaS:
    - Painéis de filtro laterais devem ter scroll independente (`overscroll-contain`) sem arrastar a página principal.
    - Manter fidelidade absoluta à paleta escura e badges semânticos criados pelo Alessandro (`Chumbo + Âmbar`: `#161618`, `#1e1e21`, `#252528`, `#e09f3e`).
 5. **Navegação Escalável (Sidebar com Busca):** O sistema utiliza menu lateral recolhível (`Sidebar`) com filtro de busca instantânea para comportar o crescimento de módulos (Controladoria, Operacional WhatsApp, Jurisprudência, Base de Conhecimento, Financeiro e Governança Master).
+6. **Ergonomia de Scroll, Viewport e Blindagem contra 'Scroll Trap':**
+   - Nenhuma listagem ou feed pode ter a última linha ou card colado na borda inferior do container. Use sempre padding inferior amplo (`pb-16` a `pb-24`) e espaçadores de respiro.
+   - Colunas de trabalho lado a lado devem possuir alturas uniformes sincronizadas (`lg:h-[720px]`), com cabeçalhos e barras de ação fixos (`shrink-0`) e containers internos com scroll independente (`overscroll-contain`).
+   - Feeds de mensagens devem sempre inicializar com auto-scroll suave (`scrollIntoView`) apontando para o conteúdo mais recente.
+7. **Segurança de Eventos Assíncronos & Zero Supply-Chain Bloat:**
+   - Todo manipulador de evento assíncrono (mídias de áudio/vídeo, formulários) deve extrair valores primitivos de `e.currentTarget` de forma síncrona e segura antes de chamar setters de estado (`setState`). Jamais leia propriedades do DOM dentro de callbacks enfileiradas.
+   - Ferramentas de teste e validação de interface devem viver estritamente em `devDependencies`, sem adicionar dependências transitivas desnecessárias ao runtime de produção.
 
 ## 5. Fluxo de Desenvolvimento Agêntico (Spec-Driven & Token-Aware)
 - Antes de escrever código complexo, utilize a skill `spec-architect` para transformar ideias brutas (áudios do Gustavo ou documentos do André) em especificações técnicas executáveis (`docs/specs/`).
